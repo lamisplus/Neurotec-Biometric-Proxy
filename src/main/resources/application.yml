@@ -1,0 +1,10 @@
+application:
+  library-path: C:\neurotec\Bin
+  server-url: http://localhost
+  quality: 61
+spring:
+  application:
+    admin:
+      enabled: true
+server:
+  port: 8282
