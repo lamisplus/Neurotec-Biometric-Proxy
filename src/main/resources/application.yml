@@ -8,3 +8,4 @@ spring:
       enabled: true
 server:
   port: 8282
+  quality: 61

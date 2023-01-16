@@ -10,10 +10,7 @@ import com.neurotec.devices.NFScanner;
 import com.neurotec.io.NBuffer;
 import com.neurotec.licensing.NLicense;
 import lombok.extern.slf4j.Slf4j;
-import org.lamisplus.biometric.dto.CaptureRequest;
-import org.lamisplus.biometric.dto.CaptureResponse;
-import org.lamisplus.biometric.dto.CapturedBiometric;
-import org.lamisplus.biometric.dto.Device;
+import org.lamisplus.biometric.dto.*;
 import org.lamisplus.biometric.util.LibraryManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +29,7 @@ import java.util.*;
 public class BiometricResource {
     private NDeviceManager deviceManager;
     private NBiometricClient client;
-    private final Set<CapturedBiometric> capturedBiometrics = new HashSet<>();
+    private final Set<CapturedBiometricDto> capturedBiometricDtos = new HashSet<>();
     private final String BIOMETRICS_URL_VERSION_ONE = "/api/v1/biometrics";
     private final String NEUROTEC_URL_VERSION_ONE = "/api/v1/biometrics/neurotec";
     @Value("${server.port}")
@@ -62,30 +59,41 @@ public class BiometricResource {
 
     @PostMapping(BIOMETRICS_URL_VERSION_ONE + "/enrollment")
     public CaptureResponse enrollment(@RequestParam String reader, @RequestParam boolean isNew,
-                                      @RequestBody CaptureRequest request) {
+                                      @RequestBody CaptureRequestDTO captureRequestDTO) {
+
+        //initializing response
+        CaptureResponse result = getBiometricEnrollmentDto(captureRequestDTO);
+        //checking if new
+        if(isNew){
+            this.emptyStoreByPersonId(captureRequestDTO.getPatientId());
+        }
         try {
             reader = URLDecoder.decode(reader, StandardCharsets.UTF_8.toString());
         } catch (UnsupportedEncodingException ignored) {
         }
+
         final NSubject subject = new NSubject();
         final NFinger finger = new NFinger();
         finger.setPosition(NFPosition.UNKNOWN);
         subject.getFingers().add(finger);
+
         if (this.scannerIsNotSet(reader)) {
-            return null;
+            result.getMessage().put("ERROR", "Biometrics Scanner not found");
+            result.setType(CaptureResponse.Type.ERROR);
+            return result;
         }
 
         NBiometricStatus status = client.capture(subject);
-        CaptureResponse result = new CaptureResponse();
+
         if (status.equals(NBiometricStatus.OK)) {
             status = client.createTemplate(subject);
             if (status.equals(NBiometricStatus.OK)) {
-                Set<CapturedBiometric> templates1 = request.getCaptureBiometrics();
+                Set<CapturedBiometricDto> templates1 = captureRequestDTO.getCaptureBiometrics();
                 List<NSubject> currentGallery = new ArrayList<>();
-                for (CapturedBiometric template : templates1) {
+                for (CapturedBiometricDto template : templates1) {
                     NSubject gallery = new NSubject();
                     gallery.setTemplateBuffer(new NBuffer(template.getTemplate()));
-                    gallery.setId(request.getPatientId().toString());
+                    gallery.setId(captureRequestDTO.getPatientId().toString());
                     currentGallery.add(gallery);
                     NBiometricTask task = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
                     task.getSubjects().addAll(currentGallery);
@@ -108,13 +116,16 @@ public class BiometricResource {
                 long imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
                 if(imageQuality < quality){
                     result.getMessage().put("ERROR", "Image quality is low - " + imageQuality);
+                    result.setType(CaptureResponse.Type.ERROR);
                     return result;
                 }
 
                 result.setDeviceName(reader);
                 if (status.equals(NBiometricStatus.OK)) {
                     if (isNew) {
-                        result.setType("Error: Fingerprint already captured");
+                        result.getMessage().put("ERROR", "Fingerprint already captured");
+                        result.setType(CaptureResponse.Type.ERROR);
+                        return result;
                     }
 
                 } else {
@@ -128,28 +139,30 @@ public class BiometricResource {
                         FMRecord fmRecord = new FMRecord(nfTemplate, BDIFStandard.ISO, FMRecord.VERSION_ISO_20);
                         isoTemplate = fmRecord.save(BDIFEncodingType.TRADITIONAL).toByteArray();
                     }
-                    CapturedBiometric capturedBiometric = new CapturedBiometric();
-                    capturedBiometric.setTemplate(isoTemplate);
-                    capturedBiometric.setTemplateType(request.getTemplateType());
-                    capturedBiometrics.add(capturedBiometric);
+                    CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
+                    capturedBiometricDTO.setTemplate(isoTemplate);
+                    capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
+                    capturedBiometricDtos.add(capturedBiometricDTO);
 
                     result.setTemplate(isoTemplate);
                     result.setIso(true);
 
-                    result.setCapturedBiometricsList(capturedBiometrics);
+                    result.setCapturedBiometricsList(capturedBiometricDtos);
                     imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
                     result.setImageQuality(imageQuality);
                     String base64Image = Base64.getEncoder().encodeToString(isoTemplate);
                     result.setImage(base64Image);
-                    result.setType("success");
+                    result.setType(CaptureResponse.Type.SUCCESS);
                 }
             } else {
                 LOG.info("Could not create template");
-                result.setType("Could not create template");
+                result.getMessage().put("ERROR", "Could not create template");
+                result.setType(CaptureResponse.Type.ERROR);
             }
         } else {
             LOG.info("Could not capture template");
-            result.setType("Could not capture template");
+            result.getMessage().put("ERROR", "Could not create template");
+            result.setType(CaptureResponse.Type.ERROR);
         }
         client.clear();
 
@@ -205,6 +218,23 @@ public class BiometricResource {
         obtainLicense("Biometrics.FingerMatching");
 
         createClient();
+    }
+
+    public Boolean emptyStoreByPersonId(Long personId){
+        Boolean hasCleared = false;
+        if(!BiometricStoreDTO.getPatientBiometricStore().isEmpty() && BiometricStoreDTO.getPatientBiometricStore().get(personId) != null){
+            BiometricStoreDTO.getPatientBiometricStore().remove(personId);
+            hasCleared = true;
+        }
+        return hasCleared;
+    }
+
+    public CaptureResponse getBiometricEnrollmentDto(CaptureRequestDTO captureRequestDTO){
+        CaptureResponse biometricEnrollmentDto = new CaptureResponse();
+        biometricEnrollmentDto.setBiometricType(captureRequestDTO.getBiometricType());
+        biometricEnrollmentDto.setTemplateType(captureRequestDTO.getTemplateType());
+        biometricEnrollmentDto.setPatientId(captureRequestDTO.getPatientId());
+        return biometricEnrollmentDto;
     }
 
 }
