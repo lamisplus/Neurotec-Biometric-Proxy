@@ -1,9 +1,9 @@
-package org.lamisplus.biometric.dto;
+package org.lamisplus.biometric.domain.dto;
 
 import lombok.Data;
 
 @Data
 public class Device {
     private String id;
-    private String name;
+    private String deviceName;
 }

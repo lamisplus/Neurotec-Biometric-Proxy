@@ -1,4 +1,4 @@
-package org.lamisplus.biometric.dto;
+package org.lamisplus.biometric.domain.dto;
 
 import java.util.*;
 

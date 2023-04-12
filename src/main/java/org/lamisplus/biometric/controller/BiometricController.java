@@ -1,4 +1,4 @@
-package org.lamisplus.biometric.web;
+package org.lamisplus.biometric.controller;
 
 import com.neurotec.biometrics.*;
 import com.neurotec.biometrics.client.NBiometricClient;
@@ -9,14 +9,17 @@ import com.neurotec.devices.NDeviceType;
 import com.neurotec.devices.NFScanner;
 import com.neurotec.io.NBuffer;
 import com.neurotec.licensing.NLicense;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lamisplus.biometric.dto.*;
+import org.lamisplus.biometric.domain.dto.*;
+import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.util.LibraryManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.PostConstruct;
+import javax.validation.Valid;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
@@ -26,24 +29,27 @@ import java.util.*;
 @RestController
 @Slf4j
 @CrossOrigin(origins = "*")
-public class BiometricResource {
+@RequiredArgsConstructor
+public class BiometricController {
     private NDeviceManager deviceManager;
     private NBiometricClient client;
     private final Set<CapturedBiometricDto> capturedBiometricDtos = new HashSet<>();
     private final String BIOMETRICS_URL_VERSION_ONE = "/api/v1/biometrics";
     private final String NEUROTEC_URL_VERSION_ONE = "/api/v1/biometrics/neurotec";
+    private final BiometricRepository biometricRepository;
     @Value("${server.port}")
    private String activePort;
 
     @Value("${server.quality}")
     private long quality;
 
-    @GetMapping(NEUROTEC_URL_VERSION_ONE + "/reader")
+    @GetMapping(BIOMETRICS_URL_VERSION_ONE + "/reader")
     public List<Device> getReaders() {
+        //GET - http://localhost:8282/api/v1/biometrics//reader
         List<Device> devices = new ArrayList<>();
         getDevices().forEach(device -> {
             Device d = new Device();
-            d.setName(device.getDisplayName());
+            d.setDeviceName(device.getDisplayName());
             d.setId(device.getId());
             devices.add(d);
         });
@@ -52,14 +58,15 @@ public class BiometricResource {
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/server")
     public ResponseEntity<String> getServerUrl() {
+        //GET - http://localhost:8282/api/v1/biometrics/server
         String activeUrl = "http://localhost:"+ activePort;
 
         return ResponseEntity.ok(activeUrl);
     }
 
     @PostMapping(BIOMETRICS_URL_VERSION_ONE + "/enrollment")
-    public CaptureResponse enrollment(@RequestParam String reader, @RequestParam boolean isNew,
-                                      @RequestBody CaptureRequestDTO captureRequestDTO) {
+    public CaptureResponse enrollment(@RequestParam String reader, @RequestParam(required = false, defaultValue = "false") Boolean isNew,
+                                      @Valid @RequestBody CaptureRequestDTO captureRequestDTO) {
 
         //initializing response
         CaptureResponse result = getBiometricEnrollmentDto(captureRequestDTO);
@@ -139,6 +146,19 @@ public class BiometricResource {
                         FMRecord fmRecord = new FMRecord(nfTemplate, BDIFStandard.ISO, FMRecord.VERSION_ISO_20);
                         isoTemplate = fmRecord.save(BDIFEncodingType.TRADITIONAL).toByteArray();
                     }
+
+                    byte firstTwoChar = isoTemplate[0];
+                    //String template = "46% OR AC%";
+                    String template = Integer.toHexString(firstTwoChar)+"%";
+
+                    System.out.println("********************************************************");
+                    System.out.println("firstTwoChar inside: "+firstTwoChar);
+                    System.out.println("You convert?: "+template);
+                    System.out.println("********************************************************");
+
+                    Set<StoredBiometric> biometricsInFacility = biometricRepository
+                            .findByFacilityIdWithTemplate(captureRequestDTO.getFacilityId(), template);
+
                     CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
                     capturedBiometricDTO.setTemplate(isoTemplate);
                     capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
@@ -234,6 +254,7 @@ public class BiometricResource {
         biometricEnrollmentDto.setBiometricType(captureRequestDTO.getBiometricType());
         biometricEnrollmentDto.setTemplateType(captureRequestDTO.getTemplateType());
         biometricEnrollmentDto.setPatientId(captureRequestDTO.getPatientId());
+        biometricEnrollmentDto.setReason(captureRequestDTO.getReason());
         return biometricEnrollmentDto;
     }
 

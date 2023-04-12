@@ -1,4 +1,4 @@
-package org.lamisplus.biometric.dto;
+package org.lamisplus.biometric.domain.dto;
 
 
 import lombok.Data;
@@ -7,7 +7,6 @@ import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @Data
@@ -32,4 +31,5 @@ public class CaptureResponse {
     private int matchingScore;
     private long imageQuality;
     private String image;
+    private String reason;
 }
