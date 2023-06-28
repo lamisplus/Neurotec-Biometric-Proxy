@@ -10,6 +10,7 @@ import java.util.Set;
 
 @Data
 public class CaptureRequestDTO {
+    private String id;
     @NotNull(message = "patientId is mandatory")
     private Long patientId;
 

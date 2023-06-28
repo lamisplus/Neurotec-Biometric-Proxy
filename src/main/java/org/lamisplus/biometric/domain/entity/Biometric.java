@@ -1,6 +1,7 @@
 package org.lamisplus.biometric.domain.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import lombok.*;
 import org.hibernate.annotations.*;
 import org.springframework.data.domain.Persistable;
@@ -23,6 +24,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 @Builder
+@TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
 public class Biometric implements Serializable, Persistable<String> {
 
     @Id
@@ -57,12 +59,15 @@ public class Biometric implements Serializable, Persistable<String> {
 
     private Boolean iso = false;
 
-    @Type(type = "jsonb-node")
+    @Type(type = "jsonb")
     @Column(columnDefinition = "jsonb")
     private JsonNode extra;
 
     @Column(name = "device_name")
     private String deviceName;
+
+    @Column(name = "facility_id")
+    private Long facilityId;
 
     private String reason;
 

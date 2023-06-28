@@ -5,6 +5,7 @@ import org.lamisplus.biometric.domain.entity.Biometric;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Set;
 
 
@@ -23,4 +24,13 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "\tFrom biometric WHERE facility_id=?1 AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?2 Group By person_uuid, id", nativeQuery = true)
     Set<StoredBiometric> findByFacilityIdWithTemplate(Long facilityId, String template);
 
+    @Query(value = "select * from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null ",
+    nativeQuery = true)
+    List<Biometric> getAllFingerPrintsByFacility();
+
+    @Query(value = "select * from biometric where archived = 0 " +
+            "and person_uuid = '6ea62249-ea1d-4a2e-a8ed-b59b66641a8b'",
+            nativeQuery = true)
+    List<Biometric> getAPatientBiometric();
 }
