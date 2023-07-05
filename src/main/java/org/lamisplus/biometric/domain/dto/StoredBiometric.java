@@ -4,7 +4,7 @@ package org.lamisplus.biometric.domain.dto;
 
 public interface StoredBiometric {
 
-     String getPatientId();
+     String getPersonUuid();
      byte[] getRightMiddleFinger();
      byte[] getRightThumb();
      byte[] getRightIndexFinger();

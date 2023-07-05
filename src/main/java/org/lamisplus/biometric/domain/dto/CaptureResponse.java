@@ -22,14 +22,15 @@ public class CaptureResponse {
     private String deviceType;
     @NotBlank(message = "biometricType is mandatory")
     private String biometricType;
-    public enum Type {ERROR, SUCCESS}
+    public enum Type {ERROR, SUCCESS, WARNING}
     private Type type;
     private boolean iso;
     private int imageHeight;
     private int imageWeight;
     private int imageResolution;
     private int matchingScore;
-    private long imageQuality;
+    private Integer mainImageQuality;
     private String image;
     private String reason;
+    private int age;
 }

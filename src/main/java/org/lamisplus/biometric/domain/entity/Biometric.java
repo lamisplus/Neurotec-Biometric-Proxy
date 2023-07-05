@@ -1,6 +1,10 @@
 package org.lamisplus.biometric.domain.entity;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.vladmihalcea.hibernate.type.array.*;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
+import com.vladmihalcea.hibernate.type.json.JsonNodeBinaryType;
+import com.vladmihalcea.hibernate.type.json.JsonNodeStringType;
+import com.vladmihalcea.hibernate.type.json.JsonStringType;
 import lombok.*;
 import org.hibernate.annotations.*;
 import org.springframework.data.domain.Persistable;
@@ -23,6 +27,14 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 @Builder
+@TypeDefs({
+        @TypeDef(name = "string-array", typeClass = StringArrayType.class),
+        @TypeDef(name = "int-array", typeClass = IntArrayType.class),
+        @TypeDef(name = "json", typeClass = JsonStringType.class),
+        @TypeDef(name = "jsonb", typeClass = JsonBinaryType.class),
+        @TypeDef(name = "jsonb-node", typeClass = JsonNodeBinaryType.class),
+        @TypeDef(name = "json-node", typeClass = JsonNodeStringType.class),
+})
 public class Biometric implements Serializable, Persistable<String> {
 
     @Id
@@ -57,9 +69,9 @@ public class Biometric implements Serializable, Persistable<String> {
 
     private Boolean iso = false;
 
-    @Type(type = "jsonb-node")
-    @Column(columnDefinition = "jsonb")
-    private JsonNode extra;
+    @Type(type = "jsonb")
+    @Column(columnDefinition = "jsonb", name = "details", nullable = false)
+    private Object extra;
 
     @Column(name = "device_name")
     private String deviceName;

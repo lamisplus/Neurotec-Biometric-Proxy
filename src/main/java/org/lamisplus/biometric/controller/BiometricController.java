@@ -16,6 +16,7 @@ import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.util.LibraryManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.PostConstruct;
@@ -162,14 +163,17 @@ public class BiometricController {
                     CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
                     capturedBiometricDTO.setTemplate(isoTemplate);
                     capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
+                    capturedBiometricDTO.setHashed(bcryptHash(capturedBiometricDTO.getTemplate()));
+                    capturedBiometricDTO.setImageQuality((int) imageQuality);
                     capturedBiometricDtos.add(capturedBiometricDTO);
+
 
                     result.setTemplate(isoTemplate);
                     result.setIso(true);
 
                     result.setCapturedBiometricsList(capturedBiometricDtos);
                     imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
-                    result.setImageQuality(imageQuality);
+                    result.setMainImageQuality((int)imageQuality);
                     String base64Image = Base64.getEncoder().encodeToString(isoTemplate);
                     result.setImage(base64Image);
                     result.setType(CaptureResponse.Type.SUCCESS);
@@ -256,6 +260,16 @@ public class BiometricController {
         biometricEnrollmentDto.setPatientId(captureRequestDTO.getPatientId());
         biometricEnrollmentDto.setReason(captureRequestDTO.getReason());
         return biometricEnrollmentDto;
+    }
+
+    /**
+     * Get person biometric by person uuid and recapture.
+     * @param template
+     * @return a hashed value of the base 64 template
+     */
+    public String bcryptHash(byte[] template) {
+        String encoded = Base64.getEncoder().encodeToString(template);
+        return BCrypt.hashpw(encoded, "$2a$12$MklNDNgs4Agd50cSasj91O");
     }
 
 }
