@@ -7,4 +7,6 @@ public class CapturedBiometricDto {
     private String id;
     private byte[] template;
     private String templateType;
+    private String hashed;
+    private Integer imageQuality;
 }

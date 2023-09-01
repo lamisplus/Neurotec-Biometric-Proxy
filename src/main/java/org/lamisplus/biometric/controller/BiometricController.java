@@ -1,5 +1,7 @@
 package org.lamisplus.biometric.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neurotec.biometrics.*;
 import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.biometrics.standards.*;
@@ -12,6 +14,7 @@ import com.neurotec.licensing.NLicense;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.lamisplus.biometric.controller.vm.DeduplicationResponse;
 import org.lamisplus.biometric.controller.vm.MatchedPair;
 import org.lamisplus.biometric.domain.dto.*;
@@ -20,7 +23,9 @@ import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.util.LibraryManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.PostConstruct;
@@ -29,8 +34,11 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static java.util.stream.Collectors.groupingBy;
 
 @RestController
 @Slf4j
@@ -45,6 +53,9 @@ public class BiometricController {
     private final String NEUROTEC_URL_VERSION_ONE = "/api/v1/biometrics/neurotec";
     private final BiometricRepository biometricRepository;
     private final JdbcTemplate jdbcTemplate;
+
+    private Deduplication rDeduplicationDTO;
+    private final Map<String, String> details = new HashMap<>();
 
     private static final List<NSubject> galleries = new ArrayList<>();
     @Value("${server.port}")
@@ -84,12 +95,18 @@ public class BiometricController {
         // return "Done with deduplication";
     }
 
+
     @PostMapping(BIOMETRICS_URL_VERSION_ONE + "/enrollment")
-    public CaptureResponse enrollment(@RequestParam String reader, @RequestParam(required = false, defaultValue = "false") Boolean isNew,
-                                      @Valid @RequestBody CaptureRequestDTO captureRequestDTO) {
-        LOG.info("Captured Size ****, {}", captureRequestDTO.getCaptureBiometrics().size());
+    public CaptureResponse enrollment(
+            @RequestParam String reader,
+            @RequestParam(required = false, defaultValue = "false") Boolean isNew,
+            @RequestParam(required = false, defaultValue = "false") Boolean recapture,
+            @RequestParam(required = false, defaultValue = "false") Boolean identify,
+            @Valid @RequestBody CaptureRequestDTO captureRequestDTO
+    ) {
+        LOG.info("Captured Size ****, {}", captureRequestDTO.getCapturedBiometricsList().size());
         Set<CapturedBiometricDto> capturedBiometricDtosIn =
-                captureRequestDTO.getCaptureBiometrics();
+                captureRequestDTO.getCapturedBiometricsList();
         //initializing response
         CaptureResponse result = getBiometricEnrollmentDto(captureRequestDTO);
 
@@ -118,27 +135,13 @@ public class BiometricController {
             if (status.equals(NBiometricStatus.OK)) {
                 status = client.createTemplate(subject);
                 if (status.equals(NBiometricStatus.OK)) {
-                    //Checking if fingerprint is already captured in the current capturing process
-                    status = deduplicateIfFingerIsAlreadyCapturedInTheCurrentProcess(
-                            subject, client, captureRequestDTO
-                    );
-                    if (status.equals(NBiometricStatus.OK)) {
-                        result.getMessage().put("ERROR", "Fingerprint already captured");
-                        result.setType(CaptureResponse.Type.ERROR);
+
+                    if (identify) {
+                        ClientIdentificationDTO clientIdentificationDTO = clientIdentification(reader);
+                        result.setClientIdentificationDTO(clientIdentificationDTO);
+                        result.setType(CaptureResponse.Type.SUCCESS);
                         return result;
                     }
-                    //End of check
-
-                    // Check if fingerprint already exists
-                    /*status = deduplicateIfFingerIsAlreadyCapturedWithOlderPrints(
-                            subject, client ,captureRequestDTO.getFacilityId());
-
-                    if (status.equals(NBiometricStatus.OK)) {
-                        result.getMessage().put("ERROR", "Fingerprint already exists");
-                        result.setType(CaptureResponse.Type.ERROR);
-                        LOG.info("Status is ****** {}", status);
-                        return result;
-                    }*/
 
                     //check for quality
                     long imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
@@ -148,18 +151,30 @@ public class BiometricController {
                         return result;
                     }
 
-                    result.setDeviceName(reader);
+                    //Checking if fingerprint is already captured in the current capturing process
+                    status = deduplicateIfFingerIsAlreadyCapturedInTheCurrentProcess(
+                            subject, client, captureRequestDTO
+                    );
                     if (status.equals(NBiometricStatus.OK)) {
-                        if (Boolean.TRUE.equals(isNew)) {
-                            result.getMessage().put("ERROR", "Fingerprint already captured");
-                            result.setType(CaptureResponse.Type.ERROR);
-                            return result;
-                        }
+                        result.getMessage().put("ERROR", "Fingerprint already captured");
+                        result.setType(CaptureResponse.Type.ERROR);
+                        return result;
+                    }
 
-                    } else {
-                        byte[] isoTemplate = subject.getTemplateBuffer(CBEFFBiometricOrganizations.ISO_IEC_JTC_1_SC_37_BIOMETRICS,
-                                CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
-                                FMRecord.VERSION_ISO_20).toByteArray();
+                    //Running deduplication against baseline fingerprints
+                    if(recapture){
+                        Deduplication recaptureDeduplication =
+                                deduplicationForRecapturedPrints(subject, captureRequestDTO.getPatientId(),
+                                        captureRequestDTO.getTemplateType(), captureRequestDTO.getDeduplication());
+                        result.setDeduplication(recaptureDeduplication);
+                    }
+
+
+
+                    result.setDeviceName(reader);
+                    byte[] isoTemplate = subject.getTemplateBuffer(CBEFFBiometricOrganizations.ISO_IEC_JTC_1_SC_37_BIOMETRICS,
+                            CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
+                            FMRecord.VERSION_ISO_20).toByteArray();
 
                         /*FMRecord test = new FMRecord(new NBuffer(isoTemplate), BDIFStandard.ISO);
                         if (test.getVersion().getMajor() != 2) {
@@ -168,34 +183,26 @@ public class BiometricController {
                             isoTemplate = fmRecord.save(BDIFEncodingType.TRADITIONAL).toByteArray();
                         }*/
 
-                        byte firstTwoChar = isoTemplate[0];
-                        //String template = "46% OR AC%";
-                        String template = Integer.toHexString(firstTwoChar) + "%";
+                    byte firstTwoChar = isoTemplate[0];
+                    String template = Integer.toHexString(firstTwoChar) + "%";
 
-                        System.out.println("********************************************************");
-                        System.out.println("firstTwoChar inside: " + firstTwoChar);
-                        System.out.println("You convert?: " + template);
-                        System.out.println("********************************************************");
 
-                        /*Set<StoredBiometric> biometricsInFacility = biometricRepository
-                                .findByFacilityIdWithTemplate(captureRequestDTO.getFacilityId(), template);
-    */
+                    CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
+                    capturedBiometricDTO.setTemplate(isoTemplate);
+                    capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
+                    capturedBiometricDTO.setHashed(bcryptHash(capturedBiometricDTO.getTemplate()));
+                    capturedBiometricDTO.setImageQuality((int) imageQuality);
+                    capturedBiometricDtosIn.add(capturedBiometricDTO);
 
-                        CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
-                        capturedBiometricDTO.setTemplate(isoTemplate);
-                        capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
-                        capturedBiometricDtosIn.add(capturedBiometricDTO);
+                    result.setTemplate(isoTemplate);
+                    result.setIso(true);
 
-                        result.setTemplate(isoTemplate);
-                        result.setIso(true);
-
-                        result.setCapturedBiometricsList(capturedBiometricDtosIn);
-                        imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
-                        result.setImageQuality(imageQuality);
-                        String base64Image = Base64.getEncoder().encodeToString(isoTemplate);
-                        result.setImage(base64Image);
-                        result.setType(CaptureResponse.Type.SUCCESS);
-                    }
+                    result.setCapturedBiometricsList(capturedBiometricDtosIn);
+                    imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
+                    result.setMainImageQuality(imageQuality);
+                    String base64Image = Base64.getEncoder().encodeToString(isoTemplate);
+                    result.setImage(isoTemplate);
+                    result.setType(CaptureResponse.Type.SUCCESS);
                 } else {
                     LOG.info("Could not create template");
                     result.getMessage().put("ERROR", "Could not create template");
@@ -219,6 +226,7 @@ public class BiometricController {
         Map<String, String> response = new HashMap<>();
 
         ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
+        final List<NSubject> subjectsForIdentification = new ArrayList<>();
 
         try (NSubject subject = new NSubject()) {
             final NFinger finger = new NFinger();
@@ -237,29 +245,57 @@ public class BiometricController {
                 List<Biometric> biometricList =  biometricRepository
                         .getAllFingerPrintsByFacility();
 
-                NBiometricTask task = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
                 biometricList.parallelStream()
                         .filter(fingerPrint -> fingerPrint.getTemplate() != null)
                         .forEach(fingerPrint -> {
                             if (fingerPrint.getTemplate().length > 0){
-                                NSubject subjectN = new NSubject();
-                                subjectN.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
-                                subjectN.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
-                                try {
-                                    task.getSubjects().add(subjectN);
-                                } catch (Exception e) {
-                                    task.getSubjects().remove(subjectN);
-                                }
+                                NSubject nSubject = new NSubject();
+                                nSubject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                                nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
+                                subjectsForIdentification.add(nSubject);
+                            }
+                        });
+                NBiometricTask task1 = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
+                subjectsForIdentification
+                        .forEach(nSubject -> {
+                            try {
+                                task1.getSubjects().add(nSubject);
+                            } catch (Exception e) {
+                                task1.getSubjects().remove(nSubject);
+                                LOG.error("Error adding subject ***** {}", e.getMessage());
                             }
                         });
                 try {
-                    client.performTask(task);
+                    client.performTask(task1);
                 } catch (Exception e){
                     e.printStackTrace();
                 }
                 NBiometricStatus s = client.identify(subject);
                 if (s.equals(NBiometricStatus.OK)) {
-                    String uuid = subject.getMatchingResults().get(0).getId();
+
+                    String [] id = subject.getMatchingResults().get(0).getId().split("#");
+                    String matchedId = id[1];
+
+                    String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
+                            "from patient_person where uuid = ?";
+
+                    clientIdentificationDTO.setMessageType("SUCCESS_MATCH_FOUND");
+                    clientIdentificationDTO.setMessage("Client identified");
+                    clientIdentificationDTO.setPersonUuid(matchedId);
+
+                    IdentifiedClient identifiedClient = (IdentifiedClient) jdbcTemplate
+                            .queryForObject(sql, new Object[] { matchedId }, new BeanPropertyRowMapper(IdentifiedClient.class));
+
+                    assert identifiedClient != null;
+                    clientIdentificationDTO.setId(identifiedClient.getId());
+                    clientIdentificationDTO.setPersonUuid(matchedId);
+                    clientIdentificationDTO.setSex(identifiedClient.getSex());
+                    clientIdentificationDTO.setSurname(identifiedClient.getSurname());
+                    clientIdentificationDTO.setFirstName(identifiedClient.getFirstName());
+                    clientIdentificationDTO.setOtherName(identifiedClient.getOtherName());
+                    clientIdentificationDTO.setHospitalNumber(identifiedClient.getHospitalNumber());
+
+
                 }else {
                     clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
                     clientIdentificationDTO.setMessage("Could not identify clients");
@@ -276,13 +312,86 @@ public class BiometricController {
         return clientIdentificationDTO;
     }
 
+
+    @SneakyThrows
+    private Deduplication deduplicationForRecapturedPrints(
+            NSubject nSubject, Long patientId, String recapturedTemplateType,
+            Deduplication deduplication
+    ) {
+
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode parentNode = mapper.createObjectNode();
+
+        List<Biometric> baselinePrints = biometricRepository.getPatientBaselineFingerprints(patientId);
+        List<NSubject> baselineSubjects = new ArrayList<>();
+
+        baselinePrints.parallelStream()
+                .filter(fingerPrint -> fingerPrint.getTemplate() != null)
+                .forEach(fingerPrint -> {
+                    if (fingerPrint.getTemplate().length > 0){
+                        NSubject subject = new NSubject();
+                        subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                        subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
+                        baselineSubjects.add(subject);
+                    }
+                });
+
+
+        NBiometricTask task = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
+        baselineSubjects
+                .forEach(subject -> {
+                    try {
+                        task.getSubjects().add(subject);
+                    } catch (Exception e) {
+                        task.getSubjects().remove(subject);
+                    }
+                });
+
+        try {
+            client.performTask(task);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+
+        NBiometricStatus status = client.identify(nSubject);
+
+        if(status.equals(NBiometricStatus.OK)) {
+            String [] baselineSubjectId = nSubject.getMatchingResults().get(0).getId().split("#");
+            String baselineId = baselineSubjectId[0];
+            String baselineTemplateType = baselinePrints
+                    .stream()
+                    .filter(f -> StringUtils.equals(f.getId(), baselineId))
+                    .map(Biometric::getTemplateType)
+                    .findFirst().orElse(null);
+            deduplication.setMatchCount(deduplication.getMatchCount() + 1);
+
+            assert baselineTemplateType != null;
+            String key = "BASELINE_" + baselineTemplateType.toUpperCase().replaceAll(" ", "_");
+            String value = "RECAPTURE_" + recapturedTemplateType.toUpperCase().replaceAll(" ", "_");
+            details.put(key, value);
+            deduplication.setDetails(details);
+
+            if (StringUtils.equals(baselineTemplateType, recapturedTemplateType)){
+                deduplication.setPerfectMatchCount(deduplication.getPerfectMatchCount() + 1);
+            } else {
+                deduplication.setImperfectMatchCount(deduplication.getImperfectMatchCount() + 1);
+            }
+
+        }else {
+            deduplication.setUnMatchCount(deduplication.getUnMatchCount() + 1);
+        }
+
+        return deduplication;
+    }
+
+
     private DeduplicationResponse runDeduplication(Set<CapturedBiometricDto> printsToDeduplicate, String patientId){
         client.clear();
         DeduplicationResponse deduplicationResponse = new DeduplicationResponse();
         final List<NSubject> subjects = new ArrayList<>();
 
         printsToDeduplicate.forEach(capturedBiometricDto -> {
-            if(capturedBiometricDto.getId().isEmpty()){
+            if(StringUtils.isBlank(capturedBiometricDto.getId())){
                 capturedBiometricDto.setId(UUID.randomUUID().toString());
             }
         });
@@ -362,7 +471,7 @@ public class BiometricController {
                             // Building Match pair data
                         }
                         // Saving Matched Pair data
-                        saveMatchPair(matchedPairList);
+                        /// saveMatchPair(matchedPairList);
 
                         numberOfMatch.updateAndGet(v -> v + 1);
                     }
@@ -396,16 +505,13 @@ public class BiometricController {
         return jdbcTemplate.queryForObject(query, new Object[] {patientUUID}, String.class);
     }
 
-
-
-
     private NBiometricStatus deduplicateIfFingerIsAlreadyCapturedInTheCurrentProcess (
             NSubject subject,
             NBiometricClient client,
             CaptureRequestDTO captureRequestDTO
             ) {
         //client.clear();
-        Set<CapturedBiometricDto> templates = captureRequestDTO.getCaptureBiometrics();
+        Set<CapturedBiometricDto> templates = captureRequestDTO.getCapturedBiometricsList();
         List<NSubject> currentGallery = new ArrayList<>();
         for (CapturedBiometricDto template : templates) {
             //String id = captureRequestDTO.getId();
@@ -504,6 +610,11 @@ public class BiometricController {
         biometricEnrollmentDto.setPatientId(captureRequestDTO.getPatientId());
         biometricEnrollmentDto.setReason(captureRequestDTO.getReason());
         return biometricEnrollmentDto;
+    }
+
+    public String bcryptHash(byte[] template) {
+        String encoded = Base64.getEncoder().encodeToString(template);
+        return BCrypt.hashpw(encoded, "$2a$12$MklNDNgs4Agd50cSasj91O");
     }
 
 }

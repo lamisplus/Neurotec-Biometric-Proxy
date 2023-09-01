@@ -33,4 +33,18 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "and person_uuid = '6ea62249-ea1d-4a2e-a8ed-b59b66641a8b'",
             nativeQuery = true)
     List<Biometric> getAPatientBiometric();
+
+
+    @Query(value = "select * from biometric b where b.person_uuid in ( " +
+            "select distinct person_uuid from biometric where archived = 0 " +
+            "and recapture > 0 )" ,
+            nativeQuery = true)
+    List<Biometric> getPrintForRecapturedDeduplication();
+
+
+    @Query(value = "select * from biometric " +
+            "where archived = 0 and version_iso_20 = true " +
+            "and recapture = 0 " +
+            "and person_uuid = (select uuid from patient_person where archived = 0 and id = ?1)", nativeQuery = true)
+    List<Biometric> getPatientBaselineFingerprints(Long patientID);
 }
