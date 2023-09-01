@@ -11,7 +11,6 @@ import java.util.Set;
 
 @Data
 public class CaptureResponse {
-    @NotNull(message = "patientId is mandatory")
     private Long patientId;
     private HashMap<String, String> message = new HashMap<>();
     private byte[] template;
@@ -29,8 +28,15 @@ public class CaptureResponse {
     private int imageWeight;
     private int imageResolution;
     private int matchingScore;
-    private Integer mainImageQuality;
-    private String image;
+    private long mainImageQuality = 0;
+    private byte[] image;
     private String reason;
     private int age;
+    private Integer recapture;
+    private String recaptureMessage;
+    private String hashed;
+    private boolean match;
+    private Deduplication deduplication;
+    private ClientIdentificationDTO clientIdentificationDTO;
+
 }

@@ -6,11 +6,12 @@ import lombok.Data;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Data
 public class CaptureRequestDTO {
-    @NotNull(message = "patientId is mandatory")
+    private String id;
     private Long patientId;
 
     @NotBlank(message = "templateType is mandatory")
@@ -21,7 +22,8 @@ public class CaptureRequestDTO {
 
     private Long facilityId=0L;
 
-    private Set<CapturedBiometricDto> captureBiometrics = new HashSet<>();
+    private Set<CapturedBiometricDto> capturedBiometricsList = new HashSet<>();
     private String reason;
-    private int age;
+
+    private Deduplication deduplication;
 }

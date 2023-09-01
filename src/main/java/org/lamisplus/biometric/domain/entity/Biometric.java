@@ -1,10 +1,7 @@
 package org.lamisplus.biometric.domain.entity;
 
-import com.vladmihalcea.hibernate.type.array.*;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
-import com.vladmihalcea.hibernate.type.json.JsonNodeBinaryType;
-import com.vladmihalcea.hibernate.type.json.JsonNodeStringType;
-import com.vladmihalcea.hibernate.type.json.JsonStringType;
 import lombok.*;
 import org.hibernate.annotations.*;
 import org.springframework.data.domain.Persistable;
@@ -27,14 +24,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 @Builder
-@TypeDefs({
-        @TypeDef(name = "string-array", typeClass = StringArrayType.class),
-        @TypeDef(name = "int-array", typeClass = IntArrayType.class),
-        @TypeDef(name = "json", typeClass = JsonStringType.class),
-        @TypeDef(name = "jsonb", typeClass = JsonBinaryType.class),
-        @TypeDef(name = "jsonb-node", typeClass = JsonNodeBinaryType.class),
-        @TypeDef(name = "json-node", typeClass = JsonNodeStringType.class),
-})
+@TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
 public class Biometric implements Serializable, Persistable<String> {
 
     @Id
@@ -70,13 +60,34 @@ public class Biometric implements Serializable, Persistable<String> {
     private Boolean iso = false;
 
     @Type(type = "jsonb")
-    @Column(columnDefinition = "jsonb", name = "details", nullable = false)
-    private Object extra;
+    @Column(columnDefinition = "jsonb")
+    private JsonNode extra;
 
     @Column(name = "device_name")
     private String deviceName;
 
+    @Column(name = "facility_id")
+    private Long facilityId;
+
     private String reason;
+
+    @Column(name = "version_iso_20")
+    private Boolean versionIso20;
+
+    @Column(name = "image_quality")
+    private Integer imageQuality=0;
+
+    @Column(name = "recapture")
+    private Integer recapture;
+
+    @Column(name = "recapture_message")
+    private String recaptureMessage;
+
+    @Column(name = "hashed")
+    private String hashed;
+
+    @Column(name = "count")
+    private Integer count;
 
     @Override
     public boolean isNew() {

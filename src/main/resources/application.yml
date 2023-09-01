@@ -9,8 +9,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     username: postgres
-    password: emeka
-    url: jdbc:postgresql://localhost:5432/lamisplus
+    password: ecews@2023
+    url: jdbc:postgresql://localhost:5432/ch_akpet
     hibernate:
       ddl-auto: none
       event.merge.entry_copy_observer: allow
@@ -28,6 +28,10 @@ spring:
     show-sql: false
     open-in-view: false
     properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
       hibernate.enable_lazy_load_no_trans: true
       hibernate.jdbc.lob.non_contextual_creation: true
 lamis:
@@ -39,8 +43,8 @@ lamisplus:
     module:
       driver-class-name: org.postgresql.Driver
       username: postgres
-      password: emeka
-      url: jdbc:postgresql://localhost:5432/lamisplus
+      password: ecews@2023
+      url: jdbc:postgresql://localhost:5432/ch_akpet
       hikari:
         auto-commit: true
         data-source-properties:
