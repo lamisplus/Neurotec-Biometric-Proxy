@@ -136,6 +136,12 @@ public class BiometricController {
                 status = client.createTemplate(subject);
                 if (status.equals(NBiometricStatus.OK)) {
 
+                    result.setDeviceName(reader);
+                    byte[] isoTemplate = subject.getTemplateBuffer(CBEFFBiometricOrganizations.ISO_IEC_JTC_1_SC_37_BIOMETRICS,
+                            CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
+                            FMRecord.VERSION_ISO_20).toByteArray();
+                    result.setTemplate(isoTemplate);
+
                     if (identify) {
                         ClientIdentificationDTO clientIdentificationDTO = clientIdentification(reader);
                         result.setClientIdentificationDTO(clientIdentificationDTO);
@@ -169,13 +175,6 @@ public class BiometricController {
                         result.setDeduplication(recaptureDeduplication);
                     }
 
-
-
-                    result.setDeviceName(reader);
-                    byte[] isoTemplate = subject.getTemplateBuffer(CBEFFBiometricOrganizations.ISO_IEC_JTC_1_SC_37_BIOMETRICS,
-                            CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
-                            FMRecord.VERSION_ISO_20).toByteArray();
-
                         /*FMRecord test = new FMRecord(new NBuffer(isoTemplate), BDIFStandard.ISO);
                         if (test.getVersion().getMajor() != 2) {
                             NFTemplate nfTemplate = test.toNFTemplate();
@@ -194,7 +193,6 @@ public class BiometricController {
                     capturedBiometricDTO.setImageQuality((int) imageQuality);
                     capturedBiometricDtosIn.add(capturedBiometricDTO);
 
-                    result.setTemplate(isoTemplate);
                     result.setIso(true);
 
                     result.setCapturedBiometricsList(capturedBiometricDtosIn);
