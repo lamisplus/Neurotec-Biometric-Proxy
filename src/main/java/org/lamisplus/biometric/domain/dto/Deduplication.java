@@ -16,8 +16,8 @@ public class Deduplication {
 
     String patientId = "";
     LocalDate deduplicationDate = null;
-    Integer matchCount = 0;
-    Integer unMatchCount = 0;
+    Integer matchedCount = 0;
+    Integer unmatchedCount = 0;
     Integer baselineFingerCount = 0;
     Integer recaptureFingerCount = 0;
     Integer perfectMatchCount = 0;
