@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
 
@@ -74,6 +75,7 @@ public class BiometricController {
             d.setId(device.getId());
             devices.add(d);
         });
+        LOG.info("Devices ****** {}", devices);
         return devices;
     }
 
@@ -102,7 +104,8 @@ public class BiometricController {
             @RequestParam(required = false, defaultValue = "false") Boolean isNew,
             @RequestParam(required = false, defaultValue = "false") Boolean recapture,
             @RequestParam(required = false, defaultValue = "false") Boolean identify,
-            @Valid @RequestBody CaptureRequestDTO captureRequestDTO
+            @Valid @RequestBody CaptureRequestDTO captureRequestDTO,
+            @RequestParam(required = false, defaultValue = "LOCAL") String identificationType
     ) {
         LOG.info("Captured Size ****, {}", captureRequestDTO.getCapturedBiometricsList().size());
         Set<CapturedBiometricDto> capturedBiometricDtosIn =
@@ -141,20 +144,33 @@ public class BiometricController {
                             CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
                             FMRecord.VERSION_ISO_20).toByteArray();
                     result.setTemplate(isoTemplate);
-
-                    if (identify) {
-                        ClientIdentificationDTO clientIdentificationDTO = clientIdentification(reader);
-                        result.setClientIdentificationDTO(clientIdentificationDTO);
-                        result.setType(CaptureResponse.Type.SUCCESS);
-                        return result;
-                    }
-
                     //check for quality
                     long imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
+                    result.setMainImageQuality(imageQuality);
+
                     if (imageQuality < quality) {
                         result.getMessage().put("ERROR", "Image quality is low - " + imageQuality);
                         result.setType(CaptureResponse.Type.ERROR);
                         return result;
+                    }
+
+                    if (identify) {
+
+                        switch (identificationType) {
+                            case "PIMS":
+                                result.setType(CaptureResponse.Type.SUCCESS);
+                                return result;
+                            case "LOCAL":
+                                ClientIdentificationDTO clientIdentificationDTO = clientIdentification(subject);
+                                result.setClientIdentificationDTO(clientIdentificationDTO);
+                                result.setType(CaptureResponse.Type.SUCCESS);
+                                return result;
+                            default:
+                                result.getMessage().put("ERROR", "Could not identify the supplied identification type " + identificationType);
+                                result.setType(CaptureResponse.Type.ERROR);
+                                return result;
+                        }
+
                     }
 
                     //Checking if fingerprint is already captured in the current capturing process
@@ -168,6 +184,7 @@ public class BiometricController {
                     }
 
                     //Running deduplication against baseline fingerprints
+                    LOG.info("Recapture choice ******* {}", recapture);
                     if(recapture){
                         Deduplication recaptureDeduplication =
                                 deduplicationForRecapturedPrints(subject, captureRequestDTO.getPatientId(),
@@ -196,8 +213,7 @@ public class BiometricController {
                     result.setIso(true);
 
                     result.setCapturedBiometricsList(capturedBiometricDtosIn);
-                    imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
-                    result.setMainImageQuality(imageQuality);
+                    // imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
                     String base64Image = Base64.getEncoder().encodeToString(isoTemplate);
                     result.setImage(isoTemplate);
                     result.setType(CaptureResponse.Type.SUCCESS);
@@ -218,91 +234,75 @@ public class BiometricController {
     }
 
     @SneakyThrows
-    private ClientIdentificationDTO clientIdentification (@RequestParam String reader) {
+    private ClientIdentificationDTO clientIdentification (NSubject subject) {
         client.clear();
-        reader = URLDecoder.decode(reader, StandardCharsets.UTF_8.toString());
-        Map<String, String> response = new HashMap<>();
 
         ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
         final List<NSubject> subjectsForIdentification = new ArrayList<>();
 
-        try (NSubject subject = new NSubject()) {
-            final NFinger finger = new NFinger();
-            finger.setPosition(NFPosition.UNKNOWN);
-            subject.getFingers().add(finger);
+        List<Biometric> biometricList =  biometricRepository
+                .getAllFingerPrintsByFacility()
+                .parallelStream()
+                .filter(fingerPrint -> fingerPrint.getRecapture() == 0)
+                .collect(Collectors.toList());
 
-
-            if (this.scannerIsNotSet(reader)) {
-                clientIdentificationDTO.setMessageType("ERROR");
-                clientIdentificationDTO.setMessage("Biometrics Scanner not found");
-                return clientIdentificationDTO;
-            }
-
-            NBiometricStatus status = client.capture(subject);
-            if (status.equals(NBiometricStatus.OK)) {
-                List<Biometric> biometricList =  biometricRepository
-                        .getAllFingerPrintsByFacility();
-
-                biometricList.parallelStream()
-                        .filter(fingerPrint -> fingerPrint.getTemplate() != null)
-                        .forEach(fingerPrint -> {
-                            if (fingerPrint.getTemplate().length > 0){
-                                NSubject nSubject = new NSubject();
-                                nSubject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
-                                nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
-                                subjectsForIdentification.add(nSubject);
-                            }
-                        });
-                NBiometricTask task1 = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
-                subjectsForIdentification
-                        .forEach(nSubject -> {
-                            try {
-                                task1.getSubjects().add(nSubject);
-                            } catch (Exception e) {
-                                task1.getSubjects().remove(nSubject);
-                                LOG.error("Error adding subject ***** {}", e.getMessage());
-                            }
-                        });
-                try {
-                    client.performTask(task1);
-                } catch (Exception e){
-                    e.printStackTrace();
-                }
-                NBiometricStatus s = client.identify(subject);
-                if (s.equals(NBiometricStatus.OK)) {
-
-                    String [] id = subject.getMatchingResults().get(0).getId().split("#");
-                    String matchedId = id[1];
-
-                    String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
-                            "from patient_person where uuid = ?";
-
-                    clientIdentificationDTO.setMessageType("SUCCESS_MATCH_FOUND");
-                    clientIdentificationDTO.setMessage("Client identified");
-                    clientIdentificationDTO.setPersonUuid(matchedId);
-
-                    IdentifiedClient identifiedClient = (IdentifiedClient) jdbcTemplate
-                            .queryForObject(sql, new Object[] { matchedId }, new BeanPropertyRowMapper(IdentifiedClient.class));
-
-                    assert identifiedClient != null;
-                    clientIdentificationDTO.setId(identifiedClient.getId());
-                    clientIdentificationDTO.setPersonUuid(matchedId);
-                    clientIdentificationDTO.setSex(identifiedClient.getSex());
-                    clientIdentificationDTO.setSurname(identifiedClient.getSurname());
-                    clientIdentificationDTO.setFirstName(identifiedClient.getFirstName());
-                    clientIdentificationDTO.setOtherName(identifiedClient.getOtherName());
-                    clientIdentificationDTO.setHospitalNumber(identifiedClient.getHospitalNumber());
-
-
-                }else {
-                    clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
-                    clientIdentificationDTO.setMessage("Could not identify clients");
-                    return  clientIdentificationDTO;
-                }
-
-            }
+        biometricList.parallelStream()
+                .filter(fingerPrint -> fingerPrint.getTemplate() != null)
+                .forEach(fingerPrint -> {
+                    if (fingerPrint.getTemplate().length > 0){
+                        NSubject nSubject = new NSubject();
+                        nSubject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                        nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
+                        subjectsForIdentification.add(nSubject);
+                    }
+                });
+        
+        NBiometricTask task1 = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
+        subjectsForIdentification
+                .forEach(nSubject -> {
+                    try {
+                        task1.getSubjects().add(nSubject);
+                    } catch (Exception e) {
+                        task1.getSubjects().remove(nSubject);
+                        LOG.error("Error adding subject ***** {}", e.getMessage());
+                    }
+                });
+        try {
+            client.performTask(task1);
         } catch (Exception e){
+            e.printStackTrace();
+        }
+        NBiometricStatus s = client.identify(subject);
+        if (s.equals(NBiometricStatus.OK)) {
 
+            String [] id = subject.getMatchingResults().get(0).getId().split("#");
+
+            String matchedId = id[1];
+
+            String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
+                    "from patient_person where uuid = ?";
+
+            clientIdentificationDTO.setMessageType("SUCCESS_MATCH_FOUND");
+            clientIdentificationDTO.setMessage("Client identified");
+            clientIdentificationDTO.setPersonUuid(matchedId);
+
+            IdentifiedClient identifiedClient = (IdentifiedClient) jdbcTemplate
+                    .queryForObject(sql, new Object[] { matchedId }, new BeanPropertyRowMapper(IdentifiedClient.class));
+
+            assert identifiedClient != null;
+            clientIdentificationDTO.setId(identifiedClient.getId());
+            clientIdentificationDTO.setPersonUuid(matchedId);
+            clientIdentificationDTO.setSex(identifiedClient.getSex());
+            clientIdentificationDTO.setSurname(identifiedClient.getSurname());
+            clientIdentificationDTO.setFirstName(identifiedClient.getFirstName());
+            clientIdentificationDTO.setOtherName(identifiedClient.getOtherName());
+            clientIdentificationDTO.setHospitalNumber(identifiedClient.getHospitalNumber());
+
+
+        }else {
+            clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
+            clientIdentificationDTO.setMessage("Could not identify clients");
+            return  clientIdentificationDTO;
         }
 
         client.clear();
@@ -352,6 +352,8 @@ public class BiometricController {
         }
 
         NBiometricStatus status = client.identify(nSubject);
+//        deduplication.setUnMatchCount(0);
+//        deduplication.setMatchCount(0);
 
         if(status.equals(NBiometricStatus.OK)) {
             String [] baselineSubjectId = nSubject.getMatchingResults().get(0).getId().split("#");
@@ -361,7 +363,7 @@ public class BiometricController {
                     .filter(f -> StringUtils.equals(f.getId(), baselineId))
                     .map(Biometric::getTemplateType)
                     .findFirst().orElse(null);
-            deduplication.setMatchCount(deduplication.getMatchCount() + 1);
+            deduplication.setMatchedCount(deduplication.getMatchedCount() + 1);
 
             assert baselineTemplateType != null;
             String key = "BASELINE_" + baselineTemplateType.toUpperCase().replaceAll(" ", "_");
@@ -376,7 +378,7 @@ public class BiometricController {
             }
 
         }else {
-            deduplication.setUnMatchCount(deduplication.getUnMatchCount() + 1);
+            deduplication.setUnmatchedCount(deduplication.getUnmatchedCount() + 1);
         }
 
         return deduplication;
@@ -542,6 +544,7 @@ public class BiometricController {
     }
 
     private boolean scannerIsNotSet(String reader) {
+        LOG.info("Readers **** {}", reader);
         for (NDevice device : getDevices()) {
             if (device.getId().equals(reader)) {
                 client.setFingerScanner((NFScanner) device);
@@ -559,6 +562,7 @@ public class BiometricController {
     }
 
     private NDeviceManager.DeviceCollection getDevices() {
+        LOG.info("Devices ****** {}", (long) deviceManager.getDevices().size());
         return deviceManager.getDevices();
     }
 
@@ -574,8 +578,8 @@ public class BiometricController {
 
     private void createClient() {
         client = new NBiometricClient();
-        client.setMatchingThreshold(60);
-        client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
+        client.setMatchingThreshold(144);
+        client.setFingersMatchingSpeed(NMatchingSpeed.HIGH);
         client.setFingersTemplateSize(NTemplateSize.LARGE);
         client.initialize();
     }
