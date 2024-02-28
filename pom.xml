@@ -120,17 +120,11 @@
             <version>2.2.2</version>
         </dependency>
 
-        <!--mvn install:install-file -Dfile=C:\\Users\\A\\Documents\\LAMISPLUS\biometric\\FDxSDKPro_jdk1.6.0_45.jar -DgroupId=secugen -DartifactId=FDxSDKPro -Dversion=1.6 -Dpackaging=jar-->
         <dependency>
-            <groupId>secugen</groupId>
-            <artifactId>FDxSDKPro</artifactId>
-            <version>1.6</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
+            <groupId>io.github.glytching</groupId>
+            <artifactId>junit-extensions</artifactId>
+            <version>2.6.0</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>
