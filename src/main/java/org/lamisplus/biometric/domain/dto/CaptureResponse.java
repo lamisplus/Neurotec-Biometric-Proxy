@@ -36,6 +36,7 @@ public class CaptureResponse {
     private String recaptureMessage;
     private String hashed;
     private boolean match;
+    @NotBlank(message = "Deduplication object cannot be null")
     private Deduplication deduplication;
     private ClientIdentificationDTO clientIdentificationDTO;
 
