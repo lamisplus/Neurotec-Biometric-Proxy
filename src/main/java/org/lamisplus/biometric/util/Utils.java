@@ -5,6 +5,7 @@ import org.apache.commons.io.Charsets;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
+import org.lamisplus.biometric.config.Application;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileFilter;
@@ -83,7 +84,8 @@ public final class Utils {
     }
 
     public static String getWorkingDirectory() {
-        return System.getProperty("user.dir");
+        return (Application.biometricDirectory != null && !Application.biometricDirectory.isEmpty())
+                ? Application.biometricDirectory : System.getProperty("user.dir");
     }
 
     public static String getHomeDirectory() {

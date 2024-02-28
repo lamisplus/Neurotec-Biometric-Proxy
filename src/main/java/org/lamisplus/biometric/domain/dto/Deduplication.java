@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import javax.persistence.Transient;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,5 +24,8 @@ public class Deduplication {
     Integer perfectMatchCount = 0;
     Integer imperfectMatchCount = 0;
     Map<String, String> details = new HashMap<>();
+
+    @Transient
+    private HashMap<String, String> mapDetails = new HashMap<>();
 
 }
