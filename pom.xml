@@ -10,8 +10,8 @@
     </parent>
     <groupId>org.lamisplus</groupId>
     <artifactId>biometric</artifactId>
-    <version>0.0.1</version>
-    <name>biometric</name>
+    <version>1.0.0</version>
+    <name>biometric-proxy</name>
     <description>Neurotechnology Biometric</description>
 
     <properties>
@@ -125,6 +125,13 @@
             <artifactId>junit-extensions</artifactId>
             <version>2.6.0</version>
             <scope>test</scope>
+        </dependency>
+
+        <!--mvn install:install-file -Dfile=FDxSDKPro_jdk1.6.0_45.jar -DgroupId=secugen -DartifactId=FDxSDKPro -Dversion=1.6 -Dpackaging=jar-->
+        <dependency>
+            <groupId>secugen</groupId>
+            <artifactId>FDxSDKPro</artifactId>
+            <version>1.6</version>
         </dependency>
 
     </dependencies>
