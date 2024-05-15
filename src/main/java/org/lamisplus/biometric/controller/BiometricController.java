@@ -271,29 +271,33 @@ public class BiometricController {
                         client.clear();
                         return result;
                     }
-
                     //Running deduplication against baseline fingerprints
                     LOG.info("Recapture choice ******* {}", recapture);
+                    Map<String, Object> matchData = new HashMap<>();
                     if(recapture){
                         Deduplication recaptureDeduplication =
                                 deduplicationForRecapturedPrints(subject, captureRequestDTO.getPatientId(),
                                         captureRequestDTO.getTemplateType(), captureRequestDTO.getDeduplication());
                         result.setDeduplication(recaptureDeduplication);
+                        matchData = doClientVerification(captureRequestDTO.getPatientId(), subject, captureRequestDTO.getTemplateType());
                     }
-
-                    byte firstTwoChar = isoTemplate[0];
-                    String template = Integer.toHexString(firstTwoChar) + "%";
-
 
                     CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
                     capturedBiometricDTO.setTemplate(isoTemplate);
                     capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
                     capturedBiometricDTO.setHashed(bcryptHash(capturedBiometricDTO.getTemplate()));
                     capturedBiometricDTO.setImageQuality((int) imageQuality);
+                    if (matchData != null){
+                        capturedBiometricDTO.setMatchBiometricId(matchData.get("matchBiometricId").toString());
+                        capturedBiometricDTO.setMatchType(matchData.get("matchType").toString());
+                        capturedBiometricDTO.setMatchPersonUuid(matchData.get("matchPersonUuid").toString());
+                        result.getMessage().put("match", "Perfect ...");
+                    } else {
+                        result.getMessage().put("match", "Imperfect...");
+                    }
                     capturedBiometricDtosIn.add(capturedBiometricDTO);
 
                     result.setIso(true);
-
                     result.setCapturedBiometricsList(capturedBiometricDtosIn);
                     // imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
                     // NImage image = subject.getFingers().get(0).getImage();
@@ -315,6 +319,71 @@ public class BiometricController {
         client.clear();
 
         return result;
+    }
+
+    private Map<String, Object> doClientVerification(Long patientId, NSubject currentSubject, String templateType) {
+        NBiometricClient bc = null;
+        bc = new NBiometricClient();
+        bc.setMatchingThreshold(96);
+        bc.setFingersMatchingSpeed(NMatchingSpeed.LOW);
+        // biometricClient.setFingersReturnBinarizedImage(true);
+        bc.setFingersQualityThreshold((byte) 75);
+
+        List<Biometric> biometrics = biometricRepository.getPatientBaselineFingerprints(patientId);
+        List<NSubject> subjects = new ArrayList<>();
+
+        biometrics.parallelStream()
+                .filter(fingerPrint -> fingerPrint.getTemplate() != null)
+                .forEach(fingerPrint -> {
+                    if (fingerPrint.getTemplate().length > 25){
+                        NSubject s = new NSubject();
+                        byte [] template  = fingerPrint.getTemplate();
+                        template[25] = 0x00;
+                        s.setTemplateBuffer(new NBuffer(template));
+                        s.setId(fingerPrint.getId());
+                        s.setProperty("templateType", fingerPrint.getTemplateType());
+                        s.setProperty("personUuid", fingerPrint.getPersonUuid());
+                        s.setProperty("id", fingerPrint.getId());
+                        s.setProperty("recapture", fingerPrint.getRecapture());
+                        subjects.add(s);
+                    }
+                });
+
+
+        NBiometricTask t = bc.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
+        subjects
+                .forEach(sub -> {
+                    try {
+                        t.getSubjects().add(sub);
+                    } catch (Exception e) {
+                        t.getSubjects().remove(sub);
+                    }
+                });
+
+        try {
+            bc.performTask(t);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+
+        NBiometricStatus status = bc.identify(currentSubject);
+
+        if(status.equals(NBiometricStatus.OK)) {
+            String matchBiometricId = currentSubject.getMatchingResults().get(0).getId();
+            String matchTemplateType = currentSubject.getMatchingResults().get(0).getProperty("templateType").toString();
+            String matchPersonUuid = currentSubject.getMatchingResults().get(0).getProperty("personUuid").toString();
+            Map<String, Object> map = new HashMap<>();
+            map.put("matchBiometricId", matchBiometricId);
+            map.put("matchPersonUuid", matchPersonUuid);
+            String matchType = "Perfect Match";
+            if (!matchTemplateType.equalsIgnoreCase(templateType)){
+                matchType = "Imperfect Match";
+            }
+            map.put("matchType", matchType);
+            return map;
+        }else {
+            return null;
+        }
     }
 
     @SneakyThrows
@@ -411,10 +480,10 @@ public class BiometricController {
     ) {
         NBiometricClient biometricClient = null;
         biometricClient = new NBiometricClient();
-        biometricClient.setMatchingThreshold(144);
+        biometricClient.setMatchingThreshold(96);
         biometricClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-        biometricClient.setFingersReturnBinarizedImage(true);
-        // biometricClient.setFingersQualityThreshold((byte) 75);
+        // biometricClient.setFingersReturnBinarizedImage(true);
+        biometricClient.setFingersQualityThreshold((byte) 75);
 
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode parentNode = mapper.createObjectNode();

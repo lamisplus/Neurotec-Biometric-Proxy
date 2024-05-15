@@ -5,6 +5,7 @@ import org.lamisplus.biometric.domain.dto.StoredBiometric;
 import org.lamisplus.biometric.domain.entity.Biometric;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -81,6 +82,9 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "and recapture = 0 " +
             "and person_uuid = ?1", nativeQuery = true)
     List<Biometric> getPatientBaselineFingerprints1(String patientID);
+
+    @Query(value = "select * from biometric where archived = 0 and person_uuid = (select uuid from paatient_person where uuid = :personUuid and archived = 0)", nativeQuery = true)
+    List<Biometric> getPersonBiometricData(@Param("patientId") Long patientId);
 
 
 }

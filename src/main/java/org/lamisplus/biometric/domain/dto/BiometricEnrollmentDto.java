@@ -41,4 +41,7 @@ public class BiometricEnrollmentDto implements Serializable {
     private Deduplication deduplication;
     private LocalDate enrollmentDate;
     private ClientIdentificationDTO clientIdentificationDTO;
+    private String matchType;
+    private String matchBiometricId;
+    private String matchPersonUuid;
 }
