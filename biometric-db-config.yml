@@ -8,9 +8,9 @@ spring:
       enable: true
   datasource:
     driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: emeka
-    url: jdbc:postgresql://localhost:5432/edodb
+    username: xxxxxx
+    password: xxxxxxx
+    url: jdbc:postgresql://localhost:5432/xxxxxx
     hibernate:
       ddl-auto: none
       event.merge.entry_copy_observer: allow
@@ -42,9 +42,9 @@ lamisplus:
   datasource:
     module:
       driver-class-name: org.postgresql.Driver
-      username: postgres
-      password: emeka
-      url: jdbc:postgresql://localhost:5432/edodb
+      username: xxxxxxx
+      password: xxxxxxx
+      url: jdbc:postgresql://localhost:5432/xxxxxxx
       hikari:
         auto-commit: true
         data-source-properties:
