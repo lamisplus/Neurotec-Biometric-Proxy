@@ -1,5 +1,5 @@
 application:
-  library-path: C:\neurotec\Bin
+  library-path: C:\Users\ilozue.chukwuemeka\Downloads\Neutrotec_SDK_13_0\Bin\Biometric
   server-url: http://localhost
   quality: 61
 spring:

@@ -267,7 +267,7 @@ public class SecugenService {
         for (StoredBiometric biometric : storedBiometrics) {
             if(null != biometric.getPersonUuid()) {
                 MATCHED_PERSON_UUID = biometric.getPersonUuid();
-                LOG.info("MATCHED_PERSON_UUID {}", MATCHED_PERSON_UUID);
+                LOG.info("MATCHED_PERSON_UUID ........ {}", MATCHED_PERSON_UUID);
             }
             if (biometric.getLeftMiddleFinger() != null && biometric.getLeftMiddleFinger().length != 0) {
                 if(matched)break;
@@ -478,6 +478,9 @@ public class SecugenService {
         return biometricEnrollmentDto;
     }
 
+    /**
+     * deduplicate saved biometrics
+     */
     @PostConstruct
     public void deduplicateSavedBiometrics(){
         //boot device
@@ -508,12 +511,17 @@ public class SecugenService {
             allSavedBiometric.add(savedBiometric.getLeftRingFinger());
             allSavedBiometric.add(savedBiometric.getLeftLittleFinger());
             allSavedBiometric.forEach(saved-> {
-                addMatch(biometricsInFacility, saved);
+                checkingForMatch(biometricsInFacility, saved);
             });
         });
     }
 
-    private void addMatch(List<StoredBiometric> storedBiometrics, byte[] scannedTemplate){
+    /**
+     * checking For Match
+     * @param storedBiometrics
+     * @param scannedTemplate
+     */
+    private void checkingForMatch(List<StoredBiometric> storedBiometrics, byte[] scannedTemplate){
         if(getMatch(storedBiometrics, scannedTemplate)){
             Optional<Biometric> optionalBiometric = biometricRepository.getPatientMatchedPrint(scannedTemplate);
             if(optionalBiometric.isPresent()){
@@ -521,8 +529,20 @@ public class SecugenService {
                 if(optionalBiometricMatch.isPresent()){
                     Biometric biometric = optionalBiometric.get();
                     Biometric anotherBiometric = optionalBiometricMatch.get();
+                    String matchType = "";
+                    //check match type
+                    if(biometric.getPersonUuid().equalsIgnoreCase(anotherBiometric.getPersonUuid())
+                    && biometric.getBiometricType().equalsIgnoreCase(anotherBiometric.getTemplateType())){
+                        matchType = "Perfect Match";
+                    }else if(biometric.getPersonUuid().equalsIgnoreCase(anotherBiometric.getPersonUuid())
+                            && !biometric.getBiometricType().equalsIgnoreCase(anotherBiometric.getTemplateType())){
+                        matchType = "Imperfect Match";
+                    }
                     biometric.setMatchPersonUuid(MATCHED_PERSON_UUID);
+                    biometric.setMatchType(matchType);
                     biometric.setMatchBiometricId(anotherBiometric.getMatchBiometricId());
+                    biometricRepository.save(biometric);
+                    LOG.info("Saved match .......{}", matchType) ;
                 }
             }
         }
