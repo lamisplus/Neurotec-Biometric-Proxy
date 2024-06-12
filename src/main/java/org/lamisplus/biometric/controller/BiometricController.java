@@ -388,7 +388,6 @@ public class BiometricController {
 
     @SneakyThrows
     private ClientIdentificationDTO clientIdentification (NSubject subject, String personUuid) {
-        System.out.println("Person UUID: " + personUuid);
         NBiometricClient identifcationClient = null;
         identifcationClient = new NBiometricClient();
         identifcationClient.setMatchingThreshold(144);
@@ -409,8 +408,6 @@ public class BiometricController {
                     .parallelStream()
                     .collect(Collectors.toList());
 
-        System.out.println("Length: " + biometricList.size());
-
         biometricList.parallelStream()
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null)
                 .forEach(fingerPrint -> {
@@ -419,7 +416,9 @@ public class BiometricController {
                         byte [] template = fingerPrint.getTemplate();
                         try {
                             template[25] = 0x00;
-                        }catch (ArrayIndexOutOfBoundsException ignore){}
+                        }catch (ArrayIndexOutOfBoundsException exception){
+                            LOG.info("Invalid fingerprint: {}", fingerPrint.getId());
+                        }
                         nSubject.setTemplateBuffer(new NBuffer(template));
                         nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
                         subjectsForIdentification.add(nSubject);
