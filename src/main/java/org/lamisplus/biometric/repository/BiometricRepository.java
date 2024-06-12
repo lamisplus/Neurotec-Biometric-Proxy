@@ -99,5 +99,9 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
 
     @Query(value = "SELECT * FROM biometric WHERE template=?1 LIMIT 1", nativeQuery = true)
     Optional<Biometric> getPatientMatchedPrint(byte[] template);
+    @Query(value = "select * from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null and person_uuid = ?1",
+            nativeQuery = true)
+    List<Biometric> getAllFingerPrintsByPersonId(String personUuid);
 
 }

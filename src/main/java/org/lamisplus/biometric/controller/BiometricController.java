@@ -184,8 +184,8 @@ public class BiometricController {
             @RequestParam(required = false, defaultValue = "false") Boolean recapture,
             @RequestParam(required = false, defaultValue = "false") Boolean identify,
             @Valid @RequestBody CaptureRequestDTO captureRequestDTO,
-            @RequestParam(required = false, defaultValue = "LOCAL") String identificationType
-    ) {
+            @RequestParam(required = false, defaultValue = "LOCAL") String identificationType,
+            @RequestParam (required = false) String personUuid) {
         LOG.info("Captured Size ****, {}", captureRequestDTO.getCapturedBiometricsList().size());
         Set<CapturedBiometricDto> capturedBiometricDtosIn =
                 captureRequestDTO.getCapturedBiometricsList();
@@ -248,7 +248,7 @@ public class BiometricController {
                                 result.setType(CaptureResponse.Type.SUCCESS);
                                 return result;
                             case "LOCAL":
-                                ClientIdentificationDTO clientIdentificationDTO = clientIdentification(subject);
+                                ClientIdentificationDTO clientIdentificationDTO = clientIdentification(subject, personUuid);
                                 result.setClientIdentificationDTO(clientIdentificationDTO);
                                 result.setType(CaptureResponse.Type.SUCCESS);
                                 return result;
@@ -387,8 +387,8 @@ public class BiometricController {
     }
 
     @SneakyThrows
-    private ClientIdentificationDTO clientIdentification (NSubject subject) {
-
+    private ClientIdentificationDTO clientIdentification (NSubject subject, String personUuid) {
+        System.out.println("Person UUID: " + personUuid);
         NBiometricClient identifcationClient = null;
         identifcationClient = new NBiometricClient();
         identifcationClient.setMatchingThreshold(144);
@@ -398,11 +398,18 @@ public class BiometricController {
         ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
         final List<NSubject> subjectsForIdentification = new ArrayList<>();
 
-        List<Biometric> biometricList =  biometricRepository
-                .getAllFingerPrintsByFacility()
+        List<Biometric> biometricList;
+
+        biometricList = personUuid != null && !personUuid.trim().equals("") ? biometricRepository
+                .getAllFingerPrintsByPersonId(personUuid)
                 .parallelStream()
-                .filter(fingerPrint -> fingerPrint.getRecapture() == 0)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList())
+        :
+                biometricRepository.getAllFingerPrintsByFacility()
+                    .parallelStream()
+                    .collect(Collectors.toList());
+
+        System.out.println("Length: " + biometricList.size());
 
         biometricList.parallelStream()
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null)
@@ -410,7 +417,9 @@ public class BiometricController {
                     if (fingerPrint.getTemplate().length > 0){
                         NSubject nSubject = new NSubject();
                         byte [] template = fingerPrint.getTemplate();
-                        template[25] = 0x00;
+                        try {
+                            template[25] = 0x00;
+                        }catch (ArrayIndexOutOfBoundsException ignore){}
                         nSubject.setTemplateBuffer(new NBuffer(template));
                         nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
                         subjectsForIdentification.add(nSubject);
