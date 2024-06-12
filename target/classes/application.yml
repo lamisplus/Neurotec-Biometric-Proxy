@@ -1,0 +1,67 @@
+application:
+  library-path: C:\neurotec\Bin
+  server-url: http://localhost
+  quality: 61
+spring:
+  application:
+    admin:
+      enable: true
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: ecews@2023
+    url: jdbc:postgresql://localhost:5432/ch_akpet
+    hibernate:
+      ddl-auto: none
+      event.merge.entry_copy_observer: allow
+    hikari:
+      auto-commit: true
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+      maximum-pool-size: 20
+      minimum-idle: 5
+  jpa:
+    database: POSTGRESQL
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
+      hibernate.enable_lazy_load_no_trans: true
+      hibernate.jdbc.lob.non_contextual_creation: true
+lamis:
+  temp-dir: runtime/
+  module-path: modules
+
+lamisplus:
+  datasource:
+    module:
+      driver-class-name: org.postgresql.Driver
+      username: postgres
+      password: ecews@2023
+      url: jdbc:postgresql://localhost:5432/ch_akpet
+      hikari:
+        auto-commit: true
+        data-source-properties:
+          cachePrepStmts: true
+          prepStmtCacheSize: 250
+          prepStmtCacheSqlLimit: 2048
+          useServerPrepStmts: true
+        maximum-pool-size: 5
+        minimum-idle: 3
+  base-url:
+    version-one: "/api/v1/"
+  secugen:
+    biometrics:
+      server-url: http://localhost:8282
+      server-port: 8282
+      timeout: 3000
+      quality: 80
+server:
+  port: 8282
+  quality: 61

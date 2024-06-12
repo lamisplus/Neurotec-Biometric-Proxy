@@ -11,7 +11,7 @@ public class BiometricApplication {
 	public static String userDir = System.getProperty ("user.dir");
 	public static void main(String[] args) {
 		SpringApplication springApplication = new SpringApplication(new Class[]{BiometricApplication.class});
-		springApplication.setDefaultProperties(Collections.singletonMap("spring.config.additional-location", userDir + File.separator + "application.yml"));
+		springApplication.setDefaultProperties(Collections.singletonMap("spring.config.additional-location", userDir + File.separator + "biometric-db-config.yml"));
 		springApplication.run(args);
 	}
 

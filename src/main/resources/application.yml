@@ -25,7 +25,7 @@ spring:
       minimum-idle: 5
   jpa:
     database: POSTGRESQL
-    show-sql: true
+    show-sql: false
     open-in-view: false
     properties:
       hibernate:
@@ -33,6 +33,7 @@ spring:
           lob:
             non_contextual_creation: true
       hibernate.enable_lazy_load_no_trans: true
+      hibernate.jdbc.lob.non_contextual_creation: true
 lamis:
   temp-dir: runtime/
   module-path: modules
