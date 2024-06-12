@@ -76,6 +76,7 @@ public final class LibraryManager {
             path.append(Utils.FILE_SEPARATOR);
             path.append("MacOSX");
         }
+        LOG.info("Library path is ****** {}", path);
         return path.toString();
     }
 }
