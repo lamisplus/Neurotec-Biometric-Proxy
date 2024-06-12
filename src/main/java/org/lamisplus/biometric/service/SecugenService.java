@@ -10,6 +10,7 @@ import org.lamisplus.biometric.repository.BiometricRepository;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
 import javax.persistence.EntityNotFoundException;
 import java.time.LocalDate;
 import java.util.*;
@@ -36,6 +37,7 @@ public class SecugenService {
     private final BiometricRepository biometricRepository;
     public static String MATCHED_PERSON_UUID;
     private static String TEMPLATE_TYPE;
+    private static byte[] MATCHED_TEMPLATE;
     private final String LEFT_MIDDLE_FINGER = "Left Middle Finger";
     private final String LEFT_INDEX_FINGER = "Left Index Finger";
     private final String LEFT_RING_FINGER = "Left Ring Finger";
@@ -271,56 +273,67 @@ public class SecugenService {
                 if(matched)break;
                 matched = secugenManager.matchTemplate(biometric.getLeftMiddleFinger(), scannedTemplate);
                 TEMPLATE_TYPE = LEFT_MIDDLE_FINGER;
+                MATCHED_TEMPLATE = biometric.getLeftMiddleFinger();
             }
             if (biometric.getLeftIndexFinger() != null && biometric.getLeftIndexFinger().length != 0) {
                 if(matched)break;
                 matched = secugenManager.matchTemplate(biometric.getLeftIndexFinger(), scannedTemplate);
                 TEMPLATE_TYPE = LEFT_INDEX_FINGER;
+                MATCHED_TEMPLATE = biometric.getLeftIndexFinger();
             }
             if (biometric.getLeftMiddleFinger() != null && biometric.getLeftMiddleFinger().length != 0) {
                 if(matched)break;
                 matched = secugenManager.matchTemplate(biometric.getLeftMiddleFinger(), scannedTemplate);
                 TEMPLATE_TYPE = LEFT_MIDDLE_FINGER;
+                MATCHED_TEMPLATE = biometric.getLeftMiddleFinger();
             }
             if (biometric.getLeftThumb() != null && biometric.getLeftThumb().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getLeftThumb(), scannedTemplate);
                 TEMPLATE_TYPE = LEFT_THUMB;
+                MATCHED_TEMPLATE = biometric.getLeftThumb();
             }
             if (biometric.getLeftLittleFinger() != null && biometric.getLeftLittleFinger().length != 0) {
                 if(matched)break;
                 matched = secugenManager.matchTemplate(biometric.getLeftLittleFinger(), scannedTemplate);
                 TEMPLATE_TYPE = LEFT_LITTLE_FINGER;
+                MATCHED_TEMPLATE = biometric.getLeftLittleFinger();
             }
             if (biometric.getLeftRingFinger() != null && biometric.getLeftRingFinger().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getLeftRingFinger(), scannedTemplate);
                 TEMPLATE_TYPE = LEFT_RING_FINGER;
+                MATCHED_TEMPLATE = biometric.getLeftRingFinger();
             }
             if (biometric.getRightIndexFinger() != null && biometric.getRightIndexFinger().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getRightIndexFinger(), scannedTemplate);
                 TEMPLATE_TYPE = RIGHT_INDEX_FINGER;
+                MATCHED_TEMPLATE = biometric.getRightIndexFinger();
             }
             if (biometric.getRightMiddleFinger() != null && biometric.getRightMiddleFinger().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getRightMiddleFinger(), scannedTemplate);
                 TEMPLATE_TYPE = RIGHT_MIDDLE_FINGER;
+                MATCHED_TEMPLATE = biometric.getRightMiddleFinger();
             }
             if (biometric.getRightThumb() != null && biometric.getRightThumb().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getRightThumb(), scannedTemplate);
                 TEMPLATE_TYPE = RIGHT_THUMB;
+                MATCHED_TEMPLATE = biometric.getRightThumb();
             }
             if (biometric.getRightRingFinger() != null && biometric.getRightRingFinger().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getRightRingFinger(), scannedTemplate);
                 TEMPLATE_TYPE = RIGHT_RING_FINGER;
+                MATCHED_TEMPLATE = biometric.getRightRingFinger();
             }
             if (biometric.getRightLittleFinger() != null && biometric.getRightLittleFinger().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchTemplate(biometric.getRightLittleFinger(), scannedTemplate);
                 TEMPLATE_TYPE = RIGHT_LITTLE_FINGER;
+                MATCHED_TEMPLATE = biometric.getRightLittleFinger();
             }
         }
         return matched;
@@ -393,12 +406,12 @@ public class SecugenService {
 
 
     /**
-         * Recapture or identify Person.
-         * @param recapture
-         * @param optionalPersonUuid
-         * @param biometricEnrollmentDto
-         * @return BiometricEnrollmentDto
-         */
+     * Recapture or identify Person.
+     * @param recapture
+     * @param optionalPersonUuid
+     * @param biometricEnrollmentDto
+     * @return BiometricEnrollmentDto
+     */
     private BiometricEnrollmentDto recaptureOrIdentify(Boolean recapture,
                                         Optional<String> optionalPersonUuid,
                                         String template,
@@ -464,4 +477,55 @@ public class SecugenService {
         }
         return biometricEnrollmentDto;
     }
+
+    @PostConstruct
+    public void deduplicateSavedBiometrics(){
+        //boot device
+        String reader = "SG_DEV_AUTO";
+        if (this.scannerIsNotSet(reader)) {
+            LOG.error("Scanner not found");
+            throw new EntityNotFoundException("Scanner not found");
+        }
+        Long error = secugenManager.boot(secugenManager.getDeviceId(reader));
+        if (error > 0L) {
+            ErrorCode errorCode = ErrorCode.getErrorCode(error);
+            LOG.error("Error while booting device");
+            throw new IllegalStateException(errorCode.getErrorMessage());
+        }
+
+        //get templates & convert to bytes
+        biometricsInFacility = biometricRepository.findByAllPrints();
+        biometricsInFacility.forEach(savedBiometric -> {
+            List<byte[]> allSavedBiometric = new ArrayList<>();
+            allSavedBiometric.add(savedBiometric.getRightMiddleFinger());
+            allSavedBiometric.add(savedBiometric.getRightThumb());
+            allSavedBiometric.add(savedBiometric.getRightIndexFinger());
+            allSavedBiometric.add(savedBiometric.getRightRingFinger());
+            allSavedBiometric.add(savedBiometric.getRightLittleFinger());
+            allSavedBiometric.add(savedBiometric.getLeftIndexFinger());
+            allSavedBiometric.add(savedBiometric.getLeftMiddleFinger());
+            allSavedBiometric.add(savedBiometric.getLeftThumb());
+            allSavedBiometric.add(savedBiometric.getLeftRingFinger());
+            allSavedBiometric.add(savedBiometric.getLeftLittleFinger());
+            allSavedBiometric.forEach(saved-> {
+                addMatch(biometricsInFacility, saved);
+            });
+        });
+    }
+
+    private void addMatch(List<StoredBiometric> storedBiometrics, byte[] scannedTemplate){
+        if(getMatch(storedBiometrics, scannedTemplate)){
+            Optional<Biometric> optionalBiometric = biometricRepository.getPatientMatchedPrint(scannedTemplate);
+            if(optionalBiometric.isPresent()){
+                Optional<Biometric> optionalBiometricMatch = biometricRepository.getPatientMatchedPrint(MATCHED_TEMPLATE);
+                if(optionalBiometricMatch.isPresent()){
+                    Biometric biometric = optionalBiometric.get();
+                    Biometric anotherBiometric = optionalBiometricMatch.get();
+                    biometric.setMatchPersonUuid(MATCHED_PERSON_UUID);
+                    biometric.setMatchBiometricId(anotherBiometric.getMatchBiometricId());
+                }
+            }
+        }
+    }
+
 }

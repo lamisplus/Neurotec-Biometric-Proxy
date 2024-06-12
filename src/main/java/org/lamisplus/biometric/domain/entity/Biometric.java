@@ -1,17 +1,21 @@
 package org.lamisplus.biometric.domain.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import lombok.*;
-import org.hibernate.annotations.*;
+import org.hibernate.annotations.ResultCheckStyle;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Type;
+import org.hibernate.annotations.Where;
 import org.springframework.data.domain.Persistable;
 
-import javax.persistence.*;
+import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.Id;
 import javax.persistence.Table;
 import javax.validation.constraints.NotNull;
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.util.UUID;
 
 
 @Entity
@@ -24,16 +28,9 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 @Builder
-@TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
-public class Biometric implements Serializable, Persistable<String> {
+public class Biometric extends BiometricAuditEntity  implements Serializable, Persistable<String> {
 
     @Id
-    @GeneratedValue( generator = "UUID")
-    @GenericGenerator(
-            name = "UUID",
-            strategy = "org.hibernate.id.UUIDGenerator"
-    )
-    @Basic(optional = false)
     @Column(name = "ID")
     private String id;
 
@@ -59,16 +56,14 @@ public class Biometric implements Serializable, Persistable<String> {
 
     private Boolean iso = false;
 
-    @Type(type = "jsonb")
+    @Type(type = "jsonb-node")
     @Column(columnDefinition = "jsonb")
     private JsonNode extra;
 
     @Column(name = "device_name")
     private String deviceName;
 
-    @Column(name = "facility_id")
-    private Long facilityId;
-
+    @Column(name = "reason")
     private String reason;
 
     @Column(name = "version_iso_20")
@@ -79,6 +74,18 @@ public class Biometric implements Serializable, Persistable<String> {
 
     @Column(name = "recapture")
     private Integer recapture;
+
+    @Column(name = "replace_date")
+    private LocalDate replaceDate;
+
+    @Column(name = "match_type")
+    private String matchType;
+
+    @Column(name = "match_biometric_id")
+    private String matchBiometricId;
+
+    @Column(name = "match_person_uuid")
+    private String matchPersonUuid;
 
     @Column(name = "recapture_message")
     private String recaptureMessage;
@@ -92,6 +99,14 @@ public class Biometric implements Serializable, Persistable<String> {
     @Override
     public boolean isNew() {
         return id == null;
+    }
+
+    public void setId(String id) {
+        if (id != null && !id.isEmpty()) {
+            this.id = id;
+        } else {
+            this.id = UUID.randomUUID().toString();
+        }
     }
 
 }

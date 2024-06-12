@@ -24,10 +24,24 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "            string_agg((CASE template_type WHEN 'Left Thumb' THEN template END), '') AS leftThumb, \n" +
             "            string_agg((CASE template_type WHEN 'Left Ring Finger' THEN template END), '') AS leftRingFinger, \n" +
             "            string_agg((CASE template_type WHEN 'Left Little Finger' THEN template END), '') AS leftLittleFinger \n" +
-            "            From biometric WHERE WHERE version_iso_20 is not null AND version_iso_20 is true " +
+            "            From biometric WHERE version_iso_20 is not null AND version_iso_20 is true " +
             "ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1 AND archived=0" +
             " GROUP BY person_uuid, recapture", nativeQuery = true)
     List<StoredBiometric> findByFacilityIdWithTemplate(String template);
+
+    @Query(value="SELECT person_uuid AS personUuid, recapture, string_agg((CASE template_type WHEN 'Right Middle Finger' THEN template END), '') AS rightMiddleFinger,   \n" +
+            "                string_agg((CASE template_type WHEN 'Right Thumb' THEN template END), '') AS rightThumb,  \n" +
+            "            string_agg((CASE template_type WHEN 'Right Index Finger' THEN template END), '') AS rightIndexFinger,  \n" +
+            "            string_agg((CASE template_type WHEN 'Right Ring Finger' THEN template END), '') AS rightRingFinger, \n" +
+            "            string_agg((CASE template_type WHEN 'Right Little Finger' THEN template END), '') AS rightLittleFinger, \n" +
+            "            string_agg((CASE template_type WHEN 'Left Index Finger' THEN template END), '') AS leftIndexFinger,   \n" +
+            "            string_agg((CASE template_type WHEN 'Left Middle Finger' THEN template END), '') AS leftMiddleFinger,  \n" +
+            "            string_agg((CASE template_type WHEN 'Left Thumb' THEN template END), '') AS leftThumb, \n" +
+            "            string_agg((CASE template_type WHEN 'Left Ring Finger' THEN template END), '') AS leftRingFinger, \n" +
+            "            string_agg((CASE template_type WHEN 'Left Little Finger' THEN template END), '') AS leftLittleFinger \n" +
+            "            FROM biometric WHERE version_iso_20 is not null AND version_iso_20 is true AND archived=0" +
+            " GROUP BY person_uuid, recapture", nativeQuery = true)
+    List<StoredBiometric> findByAllPrints();
 
     @Query(value="SELECT person_uuid AS personUuid, recapture, string_agg((CASE template_type WHEN 'Right Middle Finger' THEN template END), '') AS rightMiddleFinger,   \n" +
             "                string_agg((CASE template_type WHEN 'Right Thumb' THEN template END), '') AS rightThumb,  \n" +
@@ -83,8 +97,7 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "and person_uuid = ?1", nativeQuery = true)
     List<Biometric> getPatientBaselineFingerprints1(String patientID);
 
-    @Query(value = "select * from biometric where archived = 0 and person_uuid = (select uuid from paatient_person where uuid = :personUuid and archived = 0)", nativeQuery = true)
-    List<Biometric> getPersonBiometricData(@Param("patientId") Long patientId);
-
+    @Query(value = "SELECT * FROM biometric WHERE template=?1 LIMIT 1", nativeQuery = true)
+    Optional<Biometric> getPatientMatchedPrint(byte[] template);
 
 }
