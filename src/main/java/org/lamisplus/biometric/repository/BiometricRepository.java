@@ -25,7 +25,7 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "            string_agg((CASE template_type WHEN 'Left Ring Finger' THEN template END), '') AS leftRingFinger, \n" +
             "            string_agg((CASE template_type WHEN 'Left Little Finger' THEN template END), '') AS leftLittleFinger \n" +
             "            From biometric WHERE version_iso_20 is not null AND version_iso_20 is true " +
-            "ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1 AND archived=0" +
+            "AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1 AND archived=0" +
             " GROUP BY person_uuid, recapture", nativeQuery = true)
     List<StoredBiometric> findByFacilityIdWithTemplate(String template);
 
@@ -54,7 +54,7 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "            string_agg((CASE template_type WHEN 'Left Ring Finger' THEN template END), '') AS leftRingFinger, \n" +
             "            string_agg((CASE template_type WHEN 'Left Little Finger' THEN template END), '') AS leftLittleFinger \n" +
             "            From biometric WHERE version_iso_20 is not null " +
-            "AND version_iso_20 is true person_uuid=?1 AND recapture=?2 " +
+            "AND version_iso_20 is true AND person_uuid=?1 AND recapture=?2 " +
             "AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?3 and archived=0" +
             " GROUP BY person_uuid, recapture", nativeQuery = true)
     List<StoredBiometric> findByFacilityIdWithTemplateAndPersonUuid(String personUuid, Integer recapture, String template);
@@ -100,4 +100,19 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
     @Query(value = "SELECT * FROM biometric WHERE template=?1 LIMIT 1", nativeQuery = true)
     Optional<Biometric> getPatientMatchedPrint(byte[] template);
 
+    @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
+            "AND version_iso_20 is true person_uuid=?1 AND recapture=?2 " +
+            "AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1 and archived=0" +
+            " LIMIT 1", nativeQuery = true)
+    Optional<Biometric> getPatientMatchedPrint(String template);
+
+    List<Biometric> findAllByTemplateType(String templateType);
+
+    Optional<Biometric> findAllByPersonUuidAndTemplateTypeAndRecapture(String personUuid, String templateType, int recapture);
+
+
+    @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
+            "AND version_iso_20 is true AND person_uuid=?1 AND recapture=?2 AND template_type=?3 " +
+            "AND archived=0 LIMIT 1", nativeQuery = true)
+    Optional<Biometric> findAllByPersonUuidRecaptureTemplateType(String anotherPersonUuid, int recapture, String templateType);
 }

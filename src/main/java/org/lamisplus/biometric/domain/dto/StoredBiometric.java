@@ -15,4 +15,5 @@ public interface StoredBiometric {
      byte[] getLeftThumb();
      byte[] getLeftRingFinger();
      byte[] getLeftLittleFinger();
+     int getRecapture();
 }

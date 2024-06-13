@@ -200,19 +200,52 @@ public class SecugenManager {
      */
     public Boolean matchTemplate(byte[] template1, byte[] template2) {
         boolean[] matched = new boolean[1];
+        int[] sc = new int[1];
         try {
-            long sl = SGFDxSecurityLevel.SL_NORMAL;
+            long sl = SGFDxSecurityLevel.SL_BELOW_NORMAL;
             if ((template1.length - template2.length) > 200) {
                 return false;
             }
+            long score = this.sgfplib.GetMatchingScore(template1, template2, sc);
             error = this.sgfplib.MatchTemplate(template1, template2, sl, matched);
-            //System.out.println("ERROR RATE: "+error +" " +" MATCHED: " + matched[0]);
+            System.out.println("ERROR RATE: "+error +" " +" MATCHED: " + matched[0]);
+            System.out.println("score is - " + score);
         }catch(Exception ex){
             ex.printStackTrace();
         }
         return matched[0];
     }
-    
+
+    /**
+     * @param template1
+     * @param template2
+     * @return
+     */
+    public Boolean matchIsoTemplate(byte[] template1, byte[] template2) {
+        long err = 0L;
+        boolean[] matched = new boolean[1];
+        matched[0] = false;
+        // ISO19794-2
+        SGISOTemplateInfo sample_info = new SGISOTemplateInfo();
+        if (sgfplib.GetIsoTemplateInfo(template1, sample_info) > 0) System.out.println("err 1" + err);
+        if (sgfplib.GetIsoTemplateInfo(template2, sample_info) > 0) System.out.println("err 2" + err);
+        //int found_finger = -1;
+        for (int i = 0; i < sample_info.TotalSamples; i++) {
+            // ISO19794-2
+            err = sgfplib.MatchIsoTemplate(template1,
+                    i,
+                    template2,
+                    0,
+                    SGFDxSecurityLevel.SL_NORMAL,
+                    matched);
+            if (matched[0]) {
+                //found_finger = sample_info.SampleInfo[i].FingerNumber;
+                break;
+            }
+            //System.out.println("err RATE: " + err + " " + " MATCHED: " + matched[0]);
+        }
+        return matched[0];
+    }
     /**
      * @param template1
      * @param template2
