@@ -496,7 +496,7 @@ public class SecugenService {
             throw new IllegalStateException(errorCode.getErrorMessage());
         }
 
-        //get templates & convert to bytes
+        //get templates
         biometricsInFacility = biometricRepository.findByAllPrints();
         biometricsInFacility.forEach(savedBiometric -> {
             List<byte[]> allSavedBiometric = new ArrayList<>();
@@ -510,8 +510,8 @@ public class SecugenService {
             allSavedBiometric.add(savedBiometric.getLeftThumb());
             allSavedBiometric.add(savedBiometric.getLeftRingFinger());
             allSavedBiometric.add(savedBiometric.getLeftLittleFinger());
-            allSavedBiometric.forEach(saved-> {
-                checkingForMatch(biometricsInFacility, saved);
+            allSavedBiometric.forEach(dbBiometrics-> {
+                checkingForMatch(biometricsInFacility, dbBiometrics);
             });
         });
     }
