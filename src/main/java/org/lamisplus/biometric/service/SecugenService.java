@@ -270,33 +270,34 @@ public class SecugenService {
             if(null != biometric.getPersonUuid()) {
                 MATCHED_PERSON_UUID = new StringBuilder(biometric.getPersonUuid());
                 LOG.info("MATCHED_PERSON_UUID ........ {}", MATCHED_PERSON_UUID);
+                //RECAPTURE = biometric.getRecapture();
             }
             //1
             if (biometric.getLeftMiddleFinger() != null && biometric.getLeftMiddleFinger().length != 0) {
                 if(matched)break;
                 matched = secugenManager.matchIsoTemplate(biometric.getLeftMiddleFinger(), scannedTemplate);
-                TEMPLATE_TYPE = LEFT_MIDDLE_FINGER;
-                MATCHED_TEMPLATE = "Left Middle Finger";
+                //TEMPLATE_TYPE = LEFT_MIDDLE_FINGER;
+                TEMPLATE_TYPE = "Left Middle Finger";
             }
             //2
             if (biometric.getLeftIndexFinger() != null && biometric.getLeftIndexFinger().length != 0) {
                 if(matched)break;
                 matched = secugenManager.matchIsoTemplate(biometric.getLeftIndexFinger(), scannedTemplate);
-                TEMPLATE_TYPE = LEFT_INDEX_FINGER;
-                MATCHED_TEMPLATE = "Left Index Finger";
+                //TEMPLATE_TYPE = LEFT_INDEX_FINGER;
+                TEMPLATE_TYPE = "Left Index Finger";
             }//3
             if (biometric.getLeftThumb() != null && biometric.getLeftThumb().length != 0) {
                 if(matched)break;
                 matched =  secugenManager.matchIsoTemplate(biometric.getLeftThumb(), scannedTemplate);
-                TEMPLATE_TYPE = LEFT_THUMB;
-                MATCHED_TEMPLATE = "Left Thumb";
+                //TEMPLATE_TYPE = LEFT_THUMB;
+                TEMPLATE_TYPE = "Left Thumb";
             }
             //4
             if (biometric.getLeftLittleFinger() != null && biometric.getLeftLittleFinger().length != 0) {
                 if(matched)break;
                 matched = secugenManager.matchIsoTemplate(biometric.getLeftLittleFinger(), scannedTemplate);
-                TEMPLATE_TYPE = LEFT_LITTLE_FINGER;
-                MATCHED_TEMPLATE = "Left Little Finger";
+                //TEMPLATE_TYPE = LEFT_LITTLE_FINGER;
+                TEMPLATE_TYPE = "Left Little Finger";
             }
             //5
             if (biometric.getLeftRingFinger() != null && biometric.getLeftRingFinger().length != 0) {
@@ -504,9 +505,11 @@ public class SecugenService {
         //get templates
         String template = "464d520020323000000%";  //OR "AC%";
         biometricsInFacility = biometricRepository.findByFacilityIdWithTemplate(template);
+        List<Biometric> biometrics = biometricRepository.findAllByVersionIso20AndIsoAndArchived(template);
+        LOG.info("biometrics size is {}", biometrics.size());
         LOG.info("biometricsInFacility size is {}", biometricsInFacility.size());
-        Iterator<StoredBiometric> iterator = biometricsInFacility.iterator();
-        while (iterator.hasNext()) {
+        //Iterator<StoredBiometric> iterator = biometricsInFacility.iterator();
+        /*while (iterator.hasNext()) {
             LOG.info("iterating...");
 
             List<byte[]> storedBiometrics = new ArrayList<>();
@@ -516,56 +519,59 @@ public class SecugenService {
             //store the biometric bytes for each finger
             storedBiometrics.add(item.getRightMiddleFinger());
             storedBiometrics.add(item.getRightThumb());
-            storedBiometrics.add(item.getRightIndexFinger());
+            *//*storedBiometrics.add(item.getRightIndexFinger());
             storedBiometrics.add(item.getRightRingFinger());
             storedBiometrics.add(item.getRightLittleFinger());
             storedBiometrics.add(item.getLeftIndexFinger());
             storedBiometrics.add(item.getLeftMiddleFinger());
             storedBiometrics.add(item.getLeftThumb());
             storedBiometrics.add(item.getLeftRingFinger());
-            storedBiometrics.add(item.getLeftLittleFinger());
+            storedBiometrics.add(item.getLeftLittleFinger());*//*
 
             LOG.info("storedBiometrics size is {}", storedBiometrics.size());
             //loop and check
-            storedBiometrics.forEach(biometricByte -> {
-                checkingForMatch(biometricsInFacility, biometricByte);
-            });
+
             iterator.remove();
-        }
+        }*/
+        biometrics.forEach(biometric -> {
+            LOG.info("biometric id is {}", biometric.getId());
+            checkingForMatch(biometricsInFacility, biometric);
+        });
     }
 
     /**
      * checking For Match
      * @param storedBiometrics
-     * @param anotherTemplate
+     * @param biometric
      */
     private boolean checkingForMatch(List<StoredBiometric> storedBiometrics,
-                                     byte[] anotherTemplate){
-        boolean match = getMatch(storedBiometrics, anotherTemplate);
+                                     Biometric biometric){
+        boolean match = getMatch(storedBiometrics, biometric.getTemplate());
         String matchType = "No Match";
         if(match){
             LOG.info("Match found ...");
 
             //check match type
-            if(MATCHED_PERSON_UUID.toString().contentEquals(ANOTHER_PERSON_UUID)){
+            if(MATCHED_PERSON_UUID != null && biometric.getPersonUuid() != null
+            && MATCHED_PERSON_UUID.toString().equalsIgnoreCase(biometric.getPersonUuid())){
                 matchType = "Perfect Match";
             }else {
                 matchType = "Imperfect Match";
             }
 
             LOG.info("Saved match .......{}", matchType) ;
+        }else {
+            LOG.info("Match not found ...");
         }
 
-        Optional<Biometric> optionalBiometric = biometricRepository
-                .findAllByPersonUuidRecaptureTemplateType(String.valueOf(ANOTHER_PERSON_UUID),
-                        RECAPTURE, TEMPLATE_TYPE);
-        if(optionalBiometric.isPresent()){
-            LOG.info("optionalBiometric is present") ;
-            Biometric biometric = optionalBiometric.get();
-            biometric.setMatchPersonUuid(String.valueOf(MATCHED_PERSON_UUID));
-            biometric.setMatchType(matchType);
-            //biometricRepository.save(biometric);
-        }
+        LOG.info("RECAPTURE COUNT {}", RECAPTURE);
+
+        biometric.setMatchPersonUuid(String.valueOf(MATCHED_PERSON_UUID));
+        biometric.setMatchType(matchType);
+        biometricRepository.save(biometric);
+
+
+
         return match;
     }
 

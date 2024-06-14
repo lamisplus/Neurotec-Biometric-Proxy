@@ -111,6 +111,15 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
     Optional<Biometric> findAllByPersonUuidAndTemplateTypeAndRecapture(String personUuid, String templateType, int recapture);
 
 
+    List<Biometric> findAllByVersionIso20AndIsoAndArchived(boolean versionIso20, boolean iso, int archived);
+
+    @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
+            "AND version_iso_20 is true AND iso is true " +
+            "AND archived=0 AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1", nativeQuery = true)
+    List<Biometric> findAllByVersionIso20AndIsoAndArchived(String template);
+
+
+
     @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
             "AND version_iso_20 is true AND person_uuid=?1 AND recapture=?2 AND template_type=?3 " +
             "AND archived=0 LIMIT 1", nativeQuery = true)
