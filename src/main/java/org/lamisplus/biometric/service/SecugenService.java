@@ -27,6 +27,8 @@ public class SecugenService {
     public static final String MATCH = "match";
     public static final String RECAPTURE_MESSAGE = "RECAPTURE_MESSAGE";
     private static List<StoredBiometric> biometricsInFacility = new ArrayList<>();
+    private static List<StoredBiometric> recapturedInFacility = new ArrayList<>();
+
     public static int RECAPTURE = 0;
     public static Integer totalPage=0;
     public static final String WARNING = "WARNING";
@@ -270,7 +272,9 @@ public class SecugenService {
             if(null != biometric.getPersonUuid()) {
                 MATCHED_PERSON_UUID = new StringBuilder(biometric.getPersonUuid());
                 LOG.info("MATCHED_PERSON_UUID ........ {}", MATCHED_PERSON_UUID);
-                //RECAPTURE = biometric.getRecapture();
+                RECAPTURE = biometric.getRecapture();
+                LOG.info("RECAPTURE ........ {}", RECAPTURE);
+
             }
             //1
             if (biometric.getLeftMiddleFinger() != null && biometric.getLeftMiddleFinger().length != 0) {
@@ -489,6 +493,32 @@ public class SecugenService {
      */
     @PostConstruct
     public void deduplicateSavedBiometrics(){
+        // Create a Scanner object to read input from the command line
+        Scanner scanner = new Scanner(System.in);
+
+        // Prompt the user for input
+        System.out.print("Enter recapture/baseline count to be matched: ");
+
+        // Read the user's input and store it in a variable
+        String count = scanner.nextLine();
+        int biometricCount = 0;
+        //check for null
+        if(count != null) {
+            try {
+                //get valid int
+                biometricCount = Integer.parseInt(count);
+            }catch (NumberFormatException nfe) {
+            LOG.error("Error/Invalid {}", nfe.getMessage());
+            throw nfe;
+            }
+        }
+
+        // Print the user's input
+        System.out.println("Matching biometric capture" + biometricCount);
+
+        // Close the Scanner object when you're done
+        scanner.close();
+
         //boot device
         String reader = "SG_DEV_AUTO";
         if (this.scannerIsNotSet(reader)) {
@@ -504,38 +534,21 @@ public class SecugenService {
 
         //get templates
         String template = "464d520020323000000%";  //OR "AC%";
-        biometricsInFacility = biometricRepository.findByFacilityIdWithTemplate(template);
-        List<Biometric> biometrics = biometricRepository.findAllByVersionIso20AndIsoAndArchived(template);
-        LOG.info("biometrics size is {}", biometrics.size());
-        LOG.info("biometricsInFacility size is {}", biometricsInFacility.size());
-        //Iterator<StoredBiometric> iterator = biometricsInFacility.iterator();
-        /*while (iterator.hasNext()) {
-            LOG.info("iterating...");
+        int from = biometricCount - 1;
+        int to = biometricCount + 1;
 
-            List<byte[]> storedBiometrics = new ArrayList<>();
-            StoredBiometric item = iterator.next();
-            ANOTHER_PERSON_UUID = new StringBuilder(item.getPersonUuid());
-            RECAPTURE = item.getRecapture();
-            //store the biometric bytes for each finger
-            storedBiometrics.add(item.getRightMiddleFinger());
-            storedBiometrics.add(item.getRightThumb());
-            *//*storedBiometrics.add(item.getRightIndexFinger());
-            storedBiometrics.add(item.getRightRingFinger());
-            storedBiometrics.add(item.getRightLittleFinger());
-            storedBiometrics.add(item.getLeftIndexFinger());
-            storedBiometrics.add(item.getLeftMiddleFinger());
-            storedBiometrics.add(item.getLeftThumb());
-            storedBiometrics.add(item.getLeftRingFinger());
-            storedBiometrics.add(item.getLeftLittleFinger());*//*
+        //Get baseline
+        List<Biometric> baselineBiometrics = biometricRepository.findAllByVersionIso20AndIsoAndArchived(template, from, to);
 
-            LOG.info("storedBiometrics size is {}", storedBiometrics.size());
-            //loop and check
+        //Get recaptures 1 to 10
+        recapturedInFacility = biometricRepository.findByFacilityIdWithTemplate(template, biometricCount, 20);
 
-            iterator.remove();
-        }*/
-        biometrics.forEach(biometric -> {
+        LOG.info("baselineBiometrics size is {}", baselineBiometrics.size());
+        LOG.info("recapturedInFacility size is {}", recapturedInFacility.size());
+
+        baselineBiometrics.forEach(biometric -> {
             LOG.info("biometric id is {}", biometric.getId());
-            checkingForMatch(biometricsInFacility, biometric);
+            checkingForMatch(recapturedInFacility, biometric);
         });
     }
 
@@ -547,31 +560,37 @@ public class SecugenService {
     private boolean checkingForMatch(List<StoredBiometric> storedBiometrics,
                                      Biometric biometric){
         boolean match = getMatch(storedBiometrics, biometric.getTemplate());
-        String matchType = "No Match";
+        String matchType = "";
         if(match){
             LOG.info("Match found ...");
 
             //check match type
-            if(MATCHED_PERSON_UUID != null && biometric.getPersonUuid() != null
-            && MATCHED_PERSON_UUID.toString().equalsIgnoreCase(biometric.getPersonUuid())){
+            //same person, same template and different recapture count -  perfect match
+            if((MATCHED_PERSON_UUID != null && biometric.getPersonUuid() != null
+            && MATCHED_PERSON_UUID.toString().equalsIgnoreCase(biometric.getPersonUuid()))
+            && (TEMPLATE_TYPE.equalsIgnoreCase(biometric.getTemplateType()))
+            && RECAPTURE != biometric.getRecapture()){
                 matchType = "Perfect Match";
-            }else {
+            }
+            //same person, same tem
+            // plate and same recapture count -  do nothing
+            else if((MATCHED_PERSON_UUID != null && biometric.getPersonUuid() != null
+                    && MATCHED_PERSON_UUID.toString().equalsIgnoreCase(biometric.getPersonUuid()))
+                    && (TEMPLATE_TYPE.equalsIgnoreCase(biometric.getTemplateType()))
+                    && RECAPTURE == biometric.getRecapture()){
+                //matchType = "Imperfect Match";
+            } else {
                 matchType = "Imperfect Match";
             }
-
             LOG.info("Saved match .......{}", matchType) ;
+            biometric.setMatchPersonUuid(String.valueOf(MATCHED_PERSON_UUID));
         }else {
             LOG.info("Match not found ...");
+            matchType = "No Match";
         }
-
         LOG.info("RECAPTURE COUNT {}", RECAPTURE);
-
-        biometric.setMatchPersonUuid(String.valueOf(MATCHED_PERSON_UUID));
         biometric.setMatchType(matchType);
         biometricRepository.save(biometric);
-
-
-
         return match;
     }
 

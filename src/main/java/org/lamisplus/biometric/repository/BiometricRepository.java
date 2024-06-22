@@ -115,13 +115,29 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
 
     @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
             "AND version_iso_20 is true AND iso is true " +
+            "AND recapture > ?2 AND recapture < ?3 " +
             "AND archived=0 AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1", nativeQuery = true)
-    List<Biometric> findAllByVersionIso20AndIsoAndArchived(String template);
-
+    List<Biometric> findAllByVersionIso20AndIsoAndArchived(String template, int minRecapture, int maxRecapture);
 
 
     @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
             "AND version_iso_20 is true AND person_uuid=?1 AND recapture=?2 AND template_type=?3 " +
             "AND archived=0 LIMIT 1", nativeQuery = true)
     Optional<Biometric> findAllByPersonUuidRecaptureTemplateType(String anotherPersonUuid, int recapture, String templateType);
+
+    @Query(value="SELECT person_uuid AS personUuid, recapture, string_agg((CASE template_type WHEN 'Right Middle Finger' THEN template END), '') AS rightMiddleFinger,   \n" +
+            "                string_agg((CASE template_type WHEN 'Right Thumb' THEN template END), '') AS rightThumb,  \n" +
+            "            string_agg((CASE template_type WHEN 'Right Index Finger' THEN template END), '') AS rightIndexFinger,  \n" +
+            "            string_agg((CASE template_type WHEN 'Right Ring Finger' THEN template END), '') AS rightRingFinger, \n" +
+            "            string_agg((CASE template_type WHEN 'Right Little Finger' THEN template END), '') AS rightLittleFinger, \n" +
+            "            string_agg((CASE template_type WHEN 'Left Index Finger' THEN template END), '') AS leftIndexFinger,   \n" +
+            "            string_agg((CASE template_type WHEN 'Left Middle Finger' THEN template END), '') AS leftMiddleFinger,  \n" +
+            "            string_agg((CASE template_type WHEN 'Left Thumb' THEN template END), '') AS leftThumb, \n" +
+            "            string_agg((CASE template_type WHEN 'Left Ring Finger' THEN template END), '') AS leftRingFinger, \n" +
+            "            string_agg((CASE template_type WHEN 'Left Little Finger' THEN template END), '') AS leftLittleFinger \n" +
+            "            From biometric WHERE version_iso_20 is not null AND version_iso_20 is true " +
+            "AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1 AND archived=0 " +
+            "AND recapture > ?2 AND recapture < ?3 " +
+            " GROUP BY person_uuid, recapture", nativeQuery = true)
+    List<StoredBiometric> findByFacilityIdWithTemplate(String template, int minRecapture, int maxRecapture);
 }

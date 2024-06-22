@@ -9,8 +9,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     username: postgres
-    password: emeka
-    url: jdbc:postgresql://localhost:5432/edolamisplus
+    password: xxxxxx
+    url: jdbc:postgresql://localhost:5432/xxxxxxx
     hibernate:
       ddl-auto: none
       event.merge.entry_copy_observer: allow
