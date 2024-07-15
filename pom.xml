@@ -10,7 +10,7 @@
     </parent>
     <groupId>org.lamisplus</groupId>
     <artifactId>biometric</artifactId>
-    <version>1.0.0</version>
+    <version>2.1.0</version>
     <name>biometric-proxy</name>
     <description>Neurotechnology Biometric</description>
 
