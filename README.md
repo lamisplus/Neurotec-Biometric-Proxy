@@ -72,3 +72,6 @@
 - Mathew Adegbite https://github.com/mathewade 
 - John gichangi https://github.com/gichangi
 - Victor Ajor   https://github.com/AJ-DataFI
+
+## Special mentions
+- Anana Aristotle https://github.com/legendaryA3
