@@ -538,10 +538,10 @@ public class SecugenService {
         int to = biometricCount + 1;
 
         //Get baseline
-        List<Biometric> baselineBiometrics = biometricRepository.findAllByVersionIso20AndIsoAndArchived(template, from, to);
+        List<Biometric> baselineBiometrics = biometricRepository.findAllByVersionIso20AndIsoAndArchived(template, biometricCount, biometricCount);
 
         //Get recaptures 1 to 10
-        recapturedInFacility = biometricRepository.findByFacilityIdWithTemplate(template, biometricCount, 20);
+        recapturedInFacility = biometricRepository.findByFacilityIdWithTemplate(template, 0, 20);
 
         LOG.info("baselineBiometrics size is {}", baselineBiometrics.size());
         LOG.info("recapturedInFacility size is {}", recapturedInFacility.size());
@@ -550,6 +550,11 @@ public class SecugenService {
             LOG.info("biometric id is {}", biometric.getId());
             checkingForMatch(recapturedInFacility, biometric);
         });
+
+        // Print the user's input
+        System.out.println("Matching biometric capture " + biometricCount);
+        System.out.println("To is " + to);
+        System.out.println("From is " + from);
     }
 
     /**

@@ -41,6 +41,7 @@ public final class LibraryManager {
     }
 
     public static String getLibraryPath() {
+        System.out.println("Utils.getWorkingDirectory() is " + Utils.getWorkingDirectory());
         StringBuilder path = new StringBuilder();
         int index = Utils.getWorkingDirectory().lastIndexOf(Utils.FILE_SEPARATOR);
         if (index == -1) {

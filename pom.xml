@@ -16,7 +16,7 @@
 
     <properties>
         <java.version>1.8</java.version>
-        <neurotec.version>13.0.0</neurotec.version>
+        <neurotec.version>10.0.0</neurotec.version>
     </properties>
 
     <dependencies>

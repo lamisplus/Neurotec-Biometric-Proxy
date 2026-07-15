@@ -274,6 +274,7 @@ public class BiometricController {
                     //Running deduplication against baseline fingerprints
                     LOG.info("Recapture choice ******* {}", recapture);
                     Map<String, Object> matchData = new HashMap<>();
+                    LOG.info("Biometric match is {}", matchData);
                     if(recapture){
                         Deduplication recaptureDeduplication =
                                 deduplicationForRecapturedPrints(subject, captureRequestDTO.getPatientId(),

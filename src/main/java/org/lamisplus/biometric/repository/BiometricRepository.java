@@ -115,7 +115,7 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
 
     @Query(value="SELECT * FROM  biometric WHERE version_iso_20 is not null " +
             "AND version_iso_20 is true AND iso is true " +
-            "AND recapture > ?2 AND recapture < ?3 " +
+            "AND recapture >= ?2 AND recapture <= ?3 " +
             "AND archived=0 AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1", nativeQuery = true)
     List<Biometric> findAllByVersionIso20AndIsoAndArchived(String template, int minRecapture, int maxRecapture);
 
@@ -137,7 +137,7 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             "            string_agg((CASE template_type WHEN 'Left Little Finger' THEN template END), '') AS leftLittleFinger \n" +
             "            From biometric WHERE version_iso_20 is not null AND version_iso_20 is true " +
             "AND ENCODE(CAST(template AS BYTEA), 'hex') LIKE ?1 AND archived=0 " +
-            "AND recapture > ?2 AND recapture < ?3 " +
+            "AND recapture >= ?2 AND recapture <= ?3 " +
             " GROUP BY person_uuid, recapture", nativeQuery = true)
     List<StoredBiometric> findByFacilityIdWithTemplate(String template, int minRecapture, int maxRecapture);
 }
