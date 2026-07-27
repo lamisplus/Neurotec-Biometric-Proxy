@@ -1,5 +1,5 @@
 application:
-  library-path: C:\Users\ilozue.chukwuemeka\Downloads\Neutrotec_SDK_13_0\Bin\Biometric
+  library-path:
   server-url: http://localhost
   quality: 61
 spring:
@@ -8,9 +8,9 @@ spring:
       enable: true
   datasource:
     driver-class-name: org.postgresql.Driver
-    username: xxxxxx
-    password: xxxxxxx
-    url: jdbc:postgresql://localhost:5432/xxxxxx
+    username: postgres
+    password: Admin
+    url: jdbc:postgresql://localhost:5432/biometric
     hibernate:
       ddl-auto: none
       event.merge.entry_copy_observer: allow
@@ -42,9 +42,9 @@ lamisplus:
   datasource:
     module:
       driver-class-name: org.postgresql.Driver
-      username: xxxxxxx
-      password: xxxxxxx
-      url: jdbc:postgresql://localhost:5432/xxxxxxx
+      username: postgres
+      password: Admin
+      url: jdbc:postgresql://localhost:5432/biometric
       hikari:
         auto-commit: true
         data-source-properties:
