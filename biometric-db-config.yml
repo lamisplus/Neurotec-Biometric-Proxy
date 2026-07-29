@@ -9,8 +9,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     username: postgres
-    password: Admin
-    url: jdbc:postgresql://localhost:5432/biometric
+    password: admin
+    url: jdbc:postgresql://localhost:5432/bauchidb
     hibernate:
       ddl-auto: none
       event.merge.entry_copy_observer: allow
@@ -43,8 +43,8 @@ lamisplus:
     module:
       driver-class-name: org.postgresql.Driver
       username: postgres
-      password: Admin
-      url: jdbc:postgresql://localhost:5432/biometric
+      password: admin
+      url: jdbc:postgresql://localhost:5432/bauchidb
       hikari:
         auto-commit: true
         data-source-properties:
