@@ -66,10 +66,6 @@ public class FingerScannerManager {
         try {
             configurePluginSearchPath();
             deviceManager = new NDeviceManager();
-            // FSCANNER and FINGER_SCANNER are separate flags, not synonyms: a plugin that
-            // registers its device as a plain fingerprint scanner without the finger-specific
-            // refinement is dropped if only FINGER_SCANNER is asked for. Both map to NFScanner,
-            // which is what the rest of this class and NBiometricClient work with.
             deviceManager.setDeviceTypes(EnumSet.of(NDeviceType.FSCANNER, NDeviceType.FINGER_SCANNER));
             deviceManager.setAutoPlug(true);
             deviceManager.initialize();
@@ -118,12 +114,6 @@ public class FingerScannerManager {
         return scanners;
     }
 
-    /**
-     * Enumerates every device the SDK can see, of any type, ignoring the finger-scanner filter
-     * the main device manager runs with. This answers the question the normal device list
-     * cannot: is the scanner absent from the bus entirely, or present but reported as a type
-     * that gets filtered out? Uses a throwaway device manager so the live one is untouched.
-     */
     public List<Map<String, Object>> scanEveryDeviceType() {
         List<Map<String, Object>> found = new ArrayList<>();
         NDeviceManager allTypes = null;
@@ -149,9 +139,6 @@ public class FingerScannerManager {
         return found;
     }
 
-    /**
-     * @param reader reader name as sent by the biometric module, possibly URL encoded
-     */
     public Optional<NFScanner> resolveScanner(String reader) {
         List<NFScanner> scanners = getFingerScanners();
         if (scanners.isEmpty()) {
@@ -167,9 +154,10 @@ public class FingerScannerManager {
             return Optional.empty();
         }
 
-        NFScanner scanner = scanners.get(match.getIndex());
-        LOG.info("Reader '{}' resolved to {} by {}", reader, candidates.get(match.getIndex()), match.getStrategy());
-        return Optional.of(scanner);
+        if (match.getStrategy() != ReaderMatcher.Strategy.EXACT_NAME) {
+            LOG.info("Reader '{}' bound to {} by {}", reader, candidates.get(match.getIndex()), match.getStrategy());
+        }
+        return Optional.of(scanners.get(match.getIndex()));
     }
 
     public ErrorCodeDTO bootStatus(String reader) {
@@ -177,7 +165,6 @@ public class FingerScannerManager {
         ErrorCode errorCode = attached ? ErrorCode.SGFDX_ERROR_NONE : ErrorCode.SGFDX_ERROR_DEVICE_NOT_FOUND;
         return ErrorCodeDTO.builder()
                 .errorID(errorCode.getErrorID())
-                // The module shows this back to the user, so name the reader that was asked for.
                 .errorName(attached ? errorCode.getErrorName() : ReaderMatcher.decode(reader))
                 .errorMessage(errorCode.getErrorMessage())
                 .errorType(errorCode.getType())
@@ -226,8 +213,6 @@ public class FingerScannerManager {
             devices.add(describe(device));
         }
         report.put("devices", devices);
-        // Same scan again with no type filter, so an empty "devices" list can be read as either
-        // "nothing attached" or "attached but classified as something we filter out".
         report.put("devicesOfEveryType", scanEveryDeviceType());
         return report;
     }
@@ -256,7 +241,6 @@ public class FingerScannerManager {
         logEveryDeviceType();
     }
 
-    /** Separates "nothing on the bus" from "present but reported as an unexpected type". */
     private void logEveryDeviceType() {
         List<Map<String, Object>> all = scanEveryDeviceType();
         if (all.isEmpty()) {

@@ -36,7 +36,6 @@ public final class ReaderMatcher {
         }
     }
 
-    /** How a reader name was matched, for the log line that follows. */
     public enum Strategy {
         EXACT_NAME("exact name"),
         NAME_WITHOUT_INSTANCE_SUFFIX("name without instance suffix"),
@@ -79,7 +78,6 @@ public final class ReaderMatcher {
             return null;
         }
 
-        // Exact match on what the SDK reports.
         for (int i = 0; i < candidates.size(); i++) {
             Candidate candidate = candidates.get(i);
             if (wanted.equals(normalise(candidate.displayName)) || wanted.equals(normalise(candidate.id))) {
