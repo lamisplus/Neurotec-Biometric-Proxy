@@ -66,7 +66,11 @@ public class FingerScannerManager {
         try {
             configurePluginSearchPath();
             deviceManager = new NDeviceManager();
-            deviceManager.setDeviceTypes(EnumSet.of(NDeviceType.FINGER_SCANNER));
+            // FSCANNER and FINGER_SCANNER are separate flags, not synonyms: a plugin that
+            // registers its device as a plain fingerprint scanner without the finger-specific
+            // refinement is dropped if only FINGER_SCANNER is asked for. Both map to NFScanner,
+            // which is what the rest of this class and NBiometricClient work with.
+            deviceManager.setDeviceTypes(EnumSet.of(NDeviceType.FSCANNER, NDeviceType.FINGER_SCANNER));
             deviceManager.setAutoPlug(true);
             deviceManager.initialize();
         } catch (Exception e) {
