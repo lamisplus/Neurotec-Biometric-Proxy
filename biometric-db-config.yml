@@ -1,5 +1,5 @@
 application:
-  library-path: C:\neurotec\neurotec\neurotec\Bin\Win32_x86
+  library-path: 'C:\neurotec\neurotec\neurotec\Bin\Win64_x64'
   server-url: http://localhost
   quality: 61
 spring:
@@ -62,8 +62,8 @@ lamisplus:
       server-port: 8282
       timeout: 3000
       quality: 80
-  neurotec: C:\neurotec\neurotec\neurotec\Bin\Win32_x86
-    plugin-search-path:
+  neurotec:
+    plugin-search-path: 'C:\neurotec\neurotec\neurotec\Bin\Win64_x64'
     license-server: /local
     license-port: 5000
 server:
