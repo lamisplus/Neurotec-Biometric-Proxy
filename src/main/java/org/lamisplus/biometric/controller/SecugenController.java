@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lamisplus.biometric.domain.dto.*;
+import org.lamisplus.biometric.service.FingerScannerManager;
 import org.lamisplus.biometric.service.SecugenManager;
 import org.lamisplus.biometric.service.SecugenService;
 import org.springframework.core.io.ClassPathResource;
@@ -27,6 +28,7 @@ public class SecugenController {
     private final String SECUGEN_URL_VERSION_ONE = "/api/v1/biometrics/secugen";
     private final String BIOMETRICS_URL_VERSION_ONE = "/api/v1/biometrics";
     private final SecugenManager secugenManager;
+    private final FingerScannerManager fingerScannerManager;
 
     @PostMapping(SECUGEN_URL_VERSION_ONE + "/store-list/{personId}")
     public ResponseEntity<Boolean> clearStoreList(@PathVariable Long personId) {
@@ -90,6 +92,9 @@ public class SecugenController {
 
     @GetMapping(SECUGEN_URL_VERSION_ONE + "/boot")
     public ErrorCodeDTO boot(@RequestParam String reader) {
+        if (!secugenManager.isSecugenReader(reader)) {
+            return fingerScannerManager.bootStatus(reader);
+        }
         return secugenService.boot(reader);
     }
 }

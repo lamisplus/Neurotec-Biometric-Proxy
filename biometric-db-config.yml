@@ -62,6 +62,10 @@ lamisplus:
       server-port: 8282
       timeout: 3000
       quality: 80
+  neurotec: C:\neurotec\neurotec\neurotec\Bin\Win32_x86
+    plugin-search-path:
+    license-server: /local
+    license-port: 5000
 server:
   port: 8282
   quality: 61

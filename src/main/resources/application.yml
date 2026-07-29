@@ -37,3 +37,13 @@ spring:
 lamis:
   temp-dir: runtime/
   module-path: modules
+lamisplus:
+  neurotec: C:\neurotec\neurotec\neurotec\Bin\Win32_x86
+    plugin-search-path:
+    license-server: /local
+    license-port: 5000
+    license-components:
+      - Biometrics.FingerExtraction
+      - Biometrics.Standards.FingerTemplates
+      - Biometrics.FingerMatching
+      - Devices.FingerScanners

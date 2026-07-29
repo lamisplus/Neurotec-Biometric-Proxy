@@ -149,6 +149,21 @@ public class SecugenManager {
         return SGFDxDeviceName.SG_DEV_AUTO;
     }
 
+    public boolean isSecugenReader(String deviceName) {
+        if (deviceName == null) {
+            return false;
+        }
+        String name = deviceName.replace("OR", "/").trim();
+        for (DeviceNames dn : DeviceNames.values()) {
+            if (dn.name().equalsIgnoreCase(name)
+                    || dn.getDeviceDriver().equalsIgnoreCase(name)
+                    || dn.getDeviceID().toString().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * @param imageBuffer
      * @return

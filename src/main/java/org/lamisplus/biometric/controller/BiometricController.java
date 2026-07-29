@@ -5,15 +5,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neurotec.biometrics.*;
 import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.biometrics.standards.*;
-import com.neurotec.devices.NDevice;
-import com.neurotec.devices.NDeviceManager;
-import com.neurotec.devices.NDeviceType;
 import com.neurotec.devices.NFScanner;
 import com.neurotec.images.NImage;
 import com.neurotec.images.NImageFormat;
 import com.neurotec.io.NBuffer;
 import com.neurotec.lang.NError;
-import com.neurotec.licensing.NLicense;
 import com.neurotec.util.NVersion;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +21,7 @@ import org.lamisplus.biometric.controller.vm.MatchedPair;
 import org.lamisplus.biometric.domain.dto.*;
 import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
-import org.lamisplus.biometric.util.LibraryManager;
+import org.lamisplus.biometric.service.FingerScannerManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,7 +34,6 @@ import javax.annotation.PostConstruct;
 import javax.validation.Valid;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -53,7 +48,6 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class BiometricController {
-    private NDeviceManager deviceManager;
     private NBiometricClient client;
     // private NBiometricClient clientForDeduplication;
     private final Set<CapturedBiometricDto> capturedBiometricDtos = new HashSet<>();
@@ -61,6 +55,7 @@ public class BiometricController {
     private final String NEUROTEC_URL_VERSION_ONE = "/api/v1/biometrics/neurotec";
     private final BiometricRepository biometricRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final FingerScannerManager fingerScannerManager;
 
     private Deduplication rDeduplicationDTO;
     private final Map<String, String> details = new HashMap<>();
@@ -76,7 +71,7 @@ public class BiometricController {
     public List<Device> getReaders() {
         //GET - http://localhost:8282/api/v1/biometrics//reader
         List<Device> devices = new ArrayList<>();
-        getDevices().forEach(device -> {
+        fingerScannerManager.getDevices().forEach(device -> {
             Device d = new Device();
             d.setDeviceName(device.getDisplayName());
             d.setId(device.getId());
@@ -84,6 +79,19 @@ public class BiometricController {
         });
         LOG.info("Devices ****** {}", devices);
         return devices;
+    }
+
+
+    @GetMapping(NEUROTEC_URL_VERSION_ONE + "/diagnostics")
+    public ResponseEntity<Map<String, Object>> diagnostics() {
+        //GET - http://localhost:8282/api/v1/biometrics/neurotec/diagnostics
+        return ResponseEntity.ok(fingerScannerManager.diagnostics());
+    }
+
+    @GetMapping(NEUROTEC_URL_VERSION_ONE + "/boot")
+    public ErrorCodeDTO boot(@RequestParam String reader) {
+        //GET - http://localhost:8282/api/v1/biometrics/neurotec/boot?reader=Futronic FS80H %231
+        return fingerScannerManager.bootStatus(reader);
     }
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/server")
@@ -114,11 +122,7 @@ public class BiometricController {
         } catch (UnsupportedEncodingException ignored) {
         }
 
-        for (NDevice device : getDevices()) {
-            if (device.getDisplayName().equals(reader)) {
-                testClient.setFingerScanner((NFScanner) device);
-            }
-        }
+        fingerScannerManager.resolveScanner(reader).ifPresent(testClient::setFingerScanner);
 
         try (NSubject subject = new NSubject()) {
             final NFinger finger = new NFinger();
@@ -792,47 +796,18 @@ public class BiometricController {
         return s;
     }
 
+    /**
+     * Binds the client to the requested reader. Returns true when no such scanner is attached,
+     * in which case the caller must not attempt a capture.
+     */
     private boolean scannerIsNotSet(String reader) {
         LOG.info("Reader from REST **** {}", reader);
-        for (NDevice device : getDevices()) {
-            if (device.getDisplayName().equals(reader)) {
-                client.setFingerScanner((NFScanner) device);
-                return false;
-            } else if (reader.equals("Futronic FS80H #1")){
-                client.setFingerScanner((NFScanner) device);
-                return false;
-            }
+        Optional<NFScanner> scanner = fingerScannerManager.resolveScanner(reader);
+        if (scanner.isPresent()) {
+            client.setFingerScanner(scanner.get());
+            return false;
         }
         return true;
-    }
-
-    private void initDeviceManager() {
-        try {
-            deviceManager = new NDeviceManager();
-        } catch (Exception e) {
-            LOG.error("Error ********* {}", e.getMessage());
-        }
-
-        List<String> name = deviceManager.getDevices().stream().map(nDevice -> {return nDevice.getDisplayName();}).collect(Collectors.toList());
-
-        LOG.info("Biometric devices - {}", name);
-        deviceManager.setDeviceTypes(EnumSet.of(NDeviceType.FINGER_SCANNER));
-        deviceManager.setAutoPlug(true);
-        deviceManager.initialize();
-    }
-
-    private NDeviceManager.DeviceCollection getDevices() {
-        return deviceManager.getDevices();
-    }
-
-    private void obtainLicense(String component) {
-        try {
-            boolean result = NLicense.obtainComponents("/local", "5000", component);
-            dsLOG.info("Obtaining license: {}: {}", component, result);
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
     }
 
     private void createClient() {
@@ -845,13 +820,8 @@ public class BiometricController {
 
     @PostConstruct
     public void init() {
-        LibraryManager.initLibraryPath();
-        initDeviceManager();
-
-        obtainLicense("Biometrics.FingerExtraction");
-        obtainLicense("Biometrics.Standards.FingerTemplates");
-        obtainLicense("Biometrics.FingerMatching");
-
+        // Native library path, licences and the device manager are set up by
+        // FingerScannerManager, which Spring constructs before this bean.
         createClient();
     }
 
