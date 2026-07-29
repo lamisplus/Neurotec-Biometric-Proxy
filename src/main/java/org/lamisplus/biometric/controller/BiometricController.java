@@ -813,6 +813,9 @@ public class BiometricController {
             LOG.error("Error ********* {}", e.getMessage());
         }
 
+        List<String> name = deviceManager.getDevices().stream().map(nDevice -> {return nDevice.getDisplayName();}).collect(Collectors.toList());
+
+        LOG.info("Biometric devices - {}", name);
         deviceManager.setDeviceTypes(EnumSet.of(NDeviceType.FINGER_SCANNER));
         deviceManager.setAutoPlug(true);
         deviceManager.initialize();
@@ -825,7 +828,7 @@ public class BiometricController {
     private void obtainLicense(String component) {
         try {
             boolean result = NLicense.obtainComponents("/local", "5000", component);
-            LOG.info("Obtaining license: {}: {}", component, result);
+            dsLOG.info("Obtaining license: {}: {}", component, result);
         } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException(e);

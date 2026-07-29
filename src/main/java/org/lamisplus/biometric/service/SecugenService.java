@@ -528,8 +528,7 @@ public class SecugenService {
         Long error = secugenManager.boot(secugenManager.getDeviceId(reader));
         if (error > 0L) {
             ErrorCode errorCode = ErrorCode.getErrorCode(error);
-            LOG.error("Error while booting device");
-            throw new IllegalStateException(errorCode.getErrorMessage());
+            LOG.error("Error while booting SECUGEN device {}", errorCode.getErrorMessage());
         }
 
         //get templates

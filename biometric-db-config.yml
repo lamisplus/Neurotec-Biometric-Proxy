@@ -1,5 +1,5 @@
 application:
-  library-path:
+  library-path: C:\neurotec\neurotec\neurotec\Bin\Win32_x86
   server-url: http://localhost
   quality: 61
 spring:
