@@ -119,6 +119,37 @@ public class FingerScannerManager {
     }
 
     /**
+     * Enumerates every device the SDK can see, of any type, ignoring the finger-scanner filter
+     * the main device manager runs with. This answers the question the normal device list
+     * cannot: is the scanner absent from the bus entirely, or present but reported as a type
+     * that gets filtered out? Uses a throwaway device manager so the live one is untouched.
+     */
+    public List<Map<String, Object>> scanEveryDeviceType() {
+        List<Map<String, Object>> found = new ArrayList<>();
+        NDeviceManager allTypes = null;
+        try {
+            allTypes = new NDeviceManager();
+            allTypes.setDeviceTypes(EnumSet.of(NDeviceType.ANY));
+            allTypes.setAutoPlug(true);
+            allTypes.initialize();
+            for (NDevice device : allTypes.getDevices()) {
+                found.add(describe(device));
+            }
+        } catch (Exception e) {
+            LOG.error("Could not enumerate devices of every type: {}", e.getMessage());
+        } finally {
+            if (allTypes != null) {
+                try {
+                    allTypes.dispose();
+                } catch (Exception e) {
+                    LOG.debug("Could not dispose the diagnostic device manager: {}", e.getMessage());
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
      * @param reader reader name as sent by the biometric module, possibly URL encoded
      */
     public Optional<NFScanner> resolveScanner(String reader) {
@@ -192,28 +223,50 @@ public class FingerScannerManager {
 
         List<Map<String, Object>> devices = new ArrayList<>();
         for (NDevice device : getDevices()) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("id", device.getId());
-            entry.put("displayName", device.getDisplayName());
-            entry.put("make", device.getMake());
-            entry.put("model", device.getModel());
-            entry.put("types", String.valueOf(device.getDeviceType()));
-            entry.put("isFingerScanner", device instanceof NFScanner);
-            entry.put("available", device.isAvailable());
-            devices.add(entry);
+            devices.add(describe(device));
         }
         report.put("devices", devices);
+        // Same scan again with no type filter, so an empty "devices" list can be read as either
+        // "nothing attached" or "attached but classified as something we filter out".
+        report.put("devicesOfEveryType", scanEveryDeviceType());
         return report;
+    }
+
+    private static Map<String, Object> describe(NDevice device) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("id", device.getId());
+        entry.put("displayName", device.getDisplayName());
+        entry.put("make", device.getMake());
+        entry.put("model", device.getModel());
+        entry.put("types", String.valueOf(device.getDeviceType()));
+        entry.put("isFingerScanner", device instanceof NFScanner);
+        entry.put("available", device.isAvailable());
+        return entry;
     }
 
     private void logDiscoveredDevices() {
         List<NFScanner> scanners = getFingerScanners();
-        if (scanners.isEmpty()) {
-            LOG.error("Neurotec found no finger scanner. Check the 'Devices.FingerScanners' licence, "
-                    + "the device plugins under lamisplus.neurotec.plugin-search-path, and the vendor driver.");
-            logPlugins();
-        } else {
+        if (!scanners.isEmpty()) {
             LOG.info("Neurotec finger scanners: {}", describe(scanners));
+            return;
+        }
+        LOG.error("Neurotec found no finger scanner. Check the 'Devices.FingerScanners' licence, "
+                + "the device plugins under lamisplus.neurotec.plugin-search-path, and the vendor driver.");
+        logPlugins();
+        logEveryDeviceType();
+    }
+
+    /** Separates "nothing on the bus" from "present but reported as an unexpected type". */
+    private void logEveryDeviceType() {
+        List<Map<String, Object>> all = scanEveryDeviceType();
+        if (all.isEmpty()) {
+            LOG.error("No device of ANY type is visible to the Neurotec SDK. Nothing is on the bus, or "
+                    + "Windows has not bound a driver to it - check Device Manager with the scanner plugged in.");
+            return;
+        }
+        LOG.warn("Devices visible once the finger-scanner filter is removed: {}", all.size());
+        for (Map<String, Object> device : all) {
+            LOG.warn("   {}", device);
         }
     }
 
