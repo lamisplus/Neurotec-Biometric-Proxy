@@ -293,7 +293,7 @@ public class BiometricController {
                     capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
                     capturedBiometricDTO.setHashed(bcryptHash(capturedBiometricDTO.getTemplate()));
                     capturedBiometricDTO.setImageQuality((int) imageQuality);
-                    if (matchData != null){
+                    if (matchData != null && !matchData.isEmpty()){
                         capturedBiometricDTO.setMatchBiometricId(matchData.get("matchBiometricId").toString());
                         capturedBiometricDTO.setMatchType(matchData.get("matchType").toString());
                         capturedBiometricDTO.setMatchPersonUuid(matchData.get("matchPersonUuid").toString());
