@@ -10,6 +10,7 @@ import com.neurotec.images.NImage;
 import com.neurotec.images.NImageFormat;
 import com.neurotec.io.NBuffer;
 import com.neurotec.lang.NError;
+import com.neurotec.lang.NotActivatedException;
 import com.neurotec.util.NVersion;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -320,6 +321,13 @@ public class BiometricController {
                 result.getMessage().put("ERROR", "Could not create template");
                 result.setType(CaptureResponse.Type.ERROR);
             }
+        } catch (NotActivatedException e) {
+            LOG.error("Neurotec licence is not activated on this machine, so capture is unavailable. "
+                    + "Check the licence components logged at start-up.");
+            result.getMessage().put("ERROR", "Neurotec licence is not activated on this machine");
+            result.setDeduplication(captureRequestDTO.getDeduplication());
+            result.setType(CaptureResponse.Type.ERROR);
+            return result;
         }
         client.clear();
 
