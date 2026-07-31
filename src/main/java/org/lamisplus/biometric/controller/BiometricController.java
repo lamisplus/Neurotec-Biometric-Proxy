@@ -343,24 +343,22 @@ public class BiometricController {
         bc.setFingersQualityThreshold((byte) 75);
 
         List<Biometric> biometrics = biometricRepository.getPatientBaselineFingerprints(patientId);
-        List<NSubject> subjects = new ArrayList<>();
 
-        biometrics.parallelStream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null)
-                .forEach(fingerPrint -> {
-                    if (fingerPrint.getTemplate().length > 25){
-                        NSubject s = new NSubject();
-                        byte [] template  = fingerPrint.getTemplate();
-                        template[25] = 0x00;
-                        s.setTemplateBuffer(new NBuffer(template));
-                        s.setId(fingerPrint.getId());
-                        s.setProperty("templateType", fingerPrint.getTemplateType());
-                        s.setProperty("personUuid", fingerPrint.getPersonUuid());
-                        s.setProperty("id", fingerPrint.getId());
-                        s.setProperty("recapture", fingerPrint.getRecapture());
-                        subjects.add(s);
-                    }
-                });
+        List<NSubject> subjects = biometrics.parallelStream()
+                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
+                .map(fingerPrint -> {
+                    NSubject s = new NSubject();
+                    byte [] template  = fingerPrint.getTemplate();
+                    template[25] = 0x00;
+                    s.setTemplateBuffer(new NBuffer(template));
+                    s.setId(fingerPrint.getId());
+                    s.setProperty("templateType", fingerPrint.getTemplateType());
+                    s.setProperty("personUuid", fingerPrint.getPersonUuid());
+                    s.setProperty("id", fingerPrint.getId());
+                    s.setProperty("recapture", fingerPrint.getRecapture());
+                    return s;
+                })
+                .collect(Collectors.toList());
 
 
         NBiometricTask t = bc.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
@@ -409,7 +407,6 @@ public class BiometricController {
         identifcationClient.setFingersReturnBinarizedImage(true);
 
         ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
-        final List<NSubject> subjectsForIdentification = new ArrayList<>();
 
         List<Biometric> biometricList =  biometricRepository
                 .getAllFingerPrintsByFacility()
@@ -417,18 +414,17 @@ public class BiometricController {
                 .filter(fingerPrint -> fingerPrint.getRecapture() == 0)
                 .collect(Collectors.toList());
 
-        biometricList.parallelStream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null)
-                .forEach(fingerPrint -> {
-                    if (fingerPrint.getTemplate().length > 0){
-                        NSubject nSubject = new NSubject();
-                        byte [] template = fingerPrint.getTemplate();
-                        template[25] = 0x00;
-                        nSubject.setTemplateBuffer(new NBuffer(template));
-                        nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
-                        subjectsForIdentification.add(nSubject);
-                    }
-                });
+        final List<NSubject> subjectsForIdentification = biometricList.parallelStream()
+                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
+                .map(fingerPrint -> {
+                    NSubject nSubject = new NSubject();
+                    byte [] template = fingerPrint.getTemplate();
+                    template[25] = 0x00;
+                    nSubject.setTemplateBuffer(new NBuffer(template));
+                    nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
+                    return nSubject;
+                })
+                .collect(Collectors.toList());
         LOG.info("Biometric size is *********** {}", biometricList.size());
         
         NBiometricTask task1 = identifcationClient.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
@@ -502,20 +498,18 @@ public class BiometricController {
         ObjectNode parentNode = mapper.createObjectNode();
 
         List<Biometric> baselinePrints = biometricRepository.getPatientBaselineFingerprints(patientId);
-        List<NSubject> baselineSubjects = new ArrayList<>();
 
-        baselinePrints.parallelStream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null)
-                .forEach(fingerPrint -> {
-                    if (fingerPrint.getTemplate().length > 0){
-                        NSubject subject = new NSubject();
-                        byte [] template  = fingerPrint.getTemplate();
-                        template[25] = 0x00;
-                        subject.setTemplateBuffer(new NBuffer(template));
-                        subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
-                        baselineSubjects.add(subject);
-                    }
-                });
+        List<NSubject> baselineSubjects = baselinePrints.parallelStream()
+                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
+                .map(fingerPrint -> {
+                    NSubject subject = new NSubject();
+                    byte [] template  = fingerPrint.getTemplate();
+                    template[25] = 0x00;
+                    subject.setTemplateBuffer(new NBuffer(template));
+                    subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
+                    return subject;
+                })
+                .collect(Collectors.toList());
 
 
         NBiometricTask task = biometricClient.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
@@ -583,8 +577,6 @@ public class BiometricController {
             deduplication.setFingersReturnBinarizedImage(true);
             deduplication.setMatchingMaximalResultCount(100);
 
-            final List<NSubject> subjects = new ArrayList<>();
-
             printsToDeduplicate.forEach(capturedBiometricDto -> {
                 if(StringUtils.isBlank(capturedBiometricDto.getId())){
                     capturedBiometricDto.setId(UUID.randomUUID().toString());
@@ -603,17 +595,16 @@ public class BiometricController {
             List<Biometric> biometricList =  biometricRepository
                     .getAllFingerPrintsByFacility();
 
-            biometricList.parallelStream()
-                    .filter(fingerPrint -> fingerPrint.getTemplate() != null)
-                    .forEach(fingerPrint -> {
-                        if (fingerPrint.getTemplate().length > 0){
-                            NSubject subject = new NSubject();
-                            subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
-                            subject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
-                            subject.setProperty("data", fingerPrint);
-                            subjects.add(subject);
-                        }
-                    });
+            final List<NSubject> subjects = biometricList.parallelStream()
+                    .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 0)
+                    .map(fingerPrint -> {
+                        NSubject subject = new NSubject();
+                        subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                        subject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
+                        subject.setProperty("data", fingerPrint);
+                        return subject;
+                    })
+                    .collect(Collectors.toList());
 
             NBiometricTask task = deduplication.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
             subjects
@@ -636,7 +627,7 @@ public class BiometricController {
 
             NBiometricClient finalDeduplication = deduplication;
             DeduplicationDetails deduplicationDetails = new DeduplicationDetails();
-            List<MatchedFinger> matchedFingerList = new ArrayList<>();
+            List<MatchedFinger> matchedFingerList = Collections.synchronizedList(new ArrayList<>());
             currentSubjects.parallelStream()
                     .forEach(subject -> {
                         NBiometricStatus s = finalDeduplication.identify(subject);
