@@ -23,6 +23,7 @@ import org.lamisplus.biometric.domain.dto.*;
 import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.service.FingerScannerManager;
+import org.lamisplus.biometric.service.IdentificationGallery;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -57,6 +58,7 @@ public class BiometricController {
     private final BiometricRepository biometricRepository;
     private final JdbcTemplate jdbcTemplate;
     private final FingerScannerManager fingerScannerManager;
+    private final IdentificationGallery identificationGallery;
 
     private Deduplication rDeduplicationDTO;
     private final Map<String, String> details = new HashMap<>();
@@ -400,48 +402,9 @@ public class BiometricController {
     @SneakyThrows
     private ClientIdentificationDTO clientIdentification (NSubject subject) {
 
-        NBiometricClient identifcationClient = null;
-        identifcationClient = new NBiometricClient();
-        identifcationClient.setMatchingThreshold(144);
-        identifcationClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-        identifcationClient.setFingersReturnBinarizedImage(true);
-
         ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
 
-        List<Biometric> biometricList =  biometricRepository
-                .getAllFingerPrintsByFacility()
-                .parallelStream()
-                .filter(fingerPrint -> fingerPrint.getRecapture() == 0)
-                .collect(Collectors.toList());
-
-        final List<NSubject> subjectsForIdentification = biometricList.parallelStream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
-                .map(fingerPrint -> {
-                    NSubject nSubject = new NSubject();
-                    byte [] template = fingerPrint.getTemplate();
-                    template[25] = 0x00;
-                    nSubject.setTemplateBuffer(new NBuffer(template));
-                    nSubject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
-                    return nSubject;
-                })
-                .collect(Collectors.toList());
-        LOG.info("Biometric size is *********** {}", biometricList.size());
-        
-        NBiometricTask task1 = identifcationClient.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
-        subjectsForIdentification
-                .forEach(nSubject -> {
-                    try {
-                        task1.getSubjects().add(nSubject);
-                    } catch (Exception e) {
-                        task1.getSubjects().remove(nSubject);
-                        LOG.error("Error adding subject ***** {}", e.getMessage());
-                    }
-                });
-        try {
-            identifcationClient.performTask(task1);
-        } catch (Exception e){
-            e.printStackTrace();
-        }
+        NBiometricClient identifcationClient = identificationGallery.upToDateClient();
 
         NBiometricStatus s = identifcationClient.identify(subject);
         if (s.equals(NBiometricStatus.OK)) {
@@ -473,10 +436,7 @@ public class BiometricController {
         }else {
             clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
             clientIdentificationDTO.setMessage("Could not identify clients");
-            return  clientIdentificationDTO;
         }
-
-        identifcationClient.clear();
 
         return clientIdentificationDTO;
     }

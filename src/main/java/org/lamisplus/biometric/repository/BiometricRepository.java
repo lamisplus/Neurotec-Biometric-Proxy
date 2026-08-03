@@ -73,6 +73,11 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     List<Biometric> getAllBaselineFingerPrintsByFacility();
 
+    @Query(value = "select id from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null and recapture = 0",
+            nativeQuery = true)
+    List<String> getBaselineFingerprintIds();
+
     @Query(value="SELECT id, first_name AS firstName, surname AS surName, hospital_number AS hospitalNumber, sex " +
             "FROM patient_person WHERE uuid=?1", nativeQuery = true)
     Optional<ClientIdentificationProject> getBiometricPersonData(String personUuid);
