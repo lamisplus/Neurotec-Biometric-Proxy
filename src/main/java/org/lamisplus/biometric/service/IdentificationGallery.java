@@ -8,6 +8,7 @@ import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.io.NBuffer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lamisplus.biometric.config.NeurotecProperties;
 import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -17,7 +18,9 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -26,11 +29,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class IdentificationGallery {
 
-    private static final int MATCHING_THRESHOLD = 144;
     private static final int BATCH_SIZE = 500;
     private static final int PROGRESS_EVERY = 10000;
 
     private final BiometricRepository biometricRepository;
+    private final NeurotecProperties neurotecProperties;
 
     private NBiometricClient client;
     private final Set<String> enrolled = new HashSet<>();
@@ -72,6 +75,32 @@ public class IdentificationGallery {
         return client;
     }
 
+    /**
+     * Reports whether a person's stored prints actually made it into the gallery, which
+     * separates "the print is not visible to this database" from "it is enrolled but did
+     * not match".
+     */
+    public synchronized Map<String, Object> status(String personUuid) {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("galleryBuilt", client != null);
+        report.put("enrolledCount", enrolled.size());
+        report.put("identificationThreshold", neurotecProperties.getIdentificationThreshold());
+        report.put("baselinePrintsInDatabase", biometricRepository.getBaselineFingerprintIds().size());
+
+        if (personUuid != null && !personUuid.trim().isEmpty()) {
+            List<String> ids = biometricRepository.getPatientBaselineFingerprints1(personUuid.trim())
+                    .stream()
+                    .map(Biometric::getId)
+                    .collect(Collectors.toList());
+            List<String> inGallery = ids.stream().filter(enrolled::contains).collect(Collectors.toList());
+            report.put("personUuid", personUuid.trim());
+            report.put("personBaselinePrints", ids.size());
+            report.put("personPrintsInGallery", inGallery.size());
+            report.put("personPrintIds", ids);
+        }
+        return report;
+    }
+
     private void rebuild() {
         if (client != null) {
             LOG.info("Rebuilding the identification gallery from scratch");
@@ -83,7 +112,7 @@ public class IdentificationGallery {
             }
         }
         client = new NBiometricClient();
-        client.setMatchingThreshold(MATCHING_THRESHOLD);
+        client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         enrolled.clear();
     }

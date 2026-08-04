@@ -15,6 +15,8 @@ public class NeurotecProperties {
 
     private String pluginSearchPath = "";
 
+    private int identificationThreshold = 144;
+
     private String licenseServer = "/local";
 
     private String licensePort = "5000";

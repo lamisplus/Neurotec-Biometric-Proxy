@@ -91,6 +91,12 @@ public class BiometricController {
         return ResponseEntity.ok(fingerScannerManager.diagnostics());
     }
 
+    @GetMapping(NEUROTEC_URL_VERSION_ONE + "/gallery")
+    public ResponseEntity<Map<String, Object>> gallery(@RequestParam(required = false) String personUuid) {
+        //GET - http://localhost:8282/api/v1/biometrics/neurotec/gallery?personUuid=...
+        return ResponseEntity.ok(identificationGallery.status(personUuid));
+    }
+
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/boot")
     public ErrorCodeDTO boot(@RequestParam String reader) {
         //GET - http://localhost:8282/api/v1/biometrics/neurotec/boot?reader=Futronic FS80H %231
