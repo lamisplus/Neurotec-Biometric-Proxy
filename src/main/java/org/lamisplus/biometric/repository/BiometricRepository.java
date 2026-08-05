@@ -73,10 +73,20 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     List<Biometric> getAllBaselineFingerPrintsByFacility();
 
+    /**
+     * Every print eligible for identification. Deliberately not limited to recapture = 0: the
+     * module numbers each fresh capture max(recapture)+1, so restricting to baselines hides
+     * every print taken after a patient's first, which SecuGen identification does not do.
+     */
     @Query(value = "select id from biometric where archived = 0 " +
-            "and version_iso_20 = true and template is not null and recapture = 0",
+            "and version_iso_20 = true and template is not null",
             nativeQuery = true)
-    List<String> getBaselineFingerprintIds();
+    List<String> getIdentificationGalleryIds();
+
+    @Query(value = "select id from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null and person_uuid = ?1",
+            nativeQuery = true)
+    List<String> getIdentificationGalleryIdsForPerson(String personUuid);
 
     @Query(value="SELECT id, first_name AS firstName, surname AS surName, hospital_number AS hospitalNumber, sex " +
             "FROM patient_person WHERE uuid=?1", nativeQuery = true)

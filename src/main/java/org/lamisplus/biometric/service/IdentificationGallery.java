@@ -59,7 +59,7 @@ public class IdentificationGallery {
     }
 
     public synchronized NBiometricClient upToDateClient() {
-        List<String> currentIds = biometricRepository.getBaselineFingerprintIds();
+        List<String> currentIds = biometricRepository.getIdentificationGalleryIds();
 
         if (client == null || !currentIds.containsAll(enrolled)) {
             // Top-up cannot express a removal, so anything archived or deleted forces a rebuild.
@@ -85,16 +85,13 @@ public class IdentificationGallery {
         report.put("galleryBuilt", client != null);
         report.put("enrolledCount", enrolled.size());
         report.put("identificationThreshold", neurotecProperties.getIdentificationThreshold());
-        report.put("baselinePrintsInDatabase", biometricRepository.getBaselineFingerprintIds().size());
+        report.put("printsInDatabase", biometricRepository.getIdentificationGalleryIds().size());
 
         if (personUuid != null && !personUuid.trim().isEmpty()) {
-            List<String> ids = biometricRepository.getPatientBaselineFingerprints1(personUuid.trim())
-                    .stream()
-                    .map(Biometric::getId)
-                    .collect(Collectors.toList());
+            List<String> ids = biometricRepository.getIdentificationGalleryIdsForPerson(personUuid.trim());
             List<String> inGallery = ids.stream().filter(enrolled::contains).collect(Collectors.toList());
             report.put("personUuid", personUuid.trim());
-            report.put("personBaselinePrints", ids.size());
+            report.put("personPrintsInDatabase", ids.size());
             report.put("personPrintsInGallery", inGallery.size());
             report.put("personPrintIds", ids);
         }
