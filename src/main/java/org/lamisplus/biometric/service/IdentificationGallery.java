@@ -1,6 +1,7 @@
 package org.lamisplus.biometric.service;
 
 import com.neurotec.biometrics.NBiometricOperation;
+import com.neurotec.biometrics.NBiometricStatus;
 import com.neurotec.biometrics.NBiometricTask;
 import com.neurotec.biometrics.NMatchingSpeed;
 import com.neurotec.biometrics.NSubject;
@@ -35,6 +36,9 @@ public class IdentificationGallery {
     private static final int PROGRESS_EVERY = 10000;
 
     private static final int WAIT_FOR_GALLERY_SECONDS = 5;
+    private static final int MAX_REJECTIONS_LOGGED = 20;
+
+    private int rejectionsLogged = 0;
 
     private final BiometricRepository biometricRepository;
     private final NeurotecProperties neurotecProperties;
@@ -192,7 +196,25 @@ public class IdentificationGallery {
             client.performTask(task);
         } catch (Exception e) {
             LOG.error("Enrolling a gallery batch failed: {}", e.getMessage(), e);
+            return 0;
         }
-        return subjects.size();
+
+        // performTask reports failure through a status, not an exception, so an unchecked
+        // task can silently enrol nothing and leave identification searching an empty gallery.
+        if (!NBiometricStatus.OK.equals(task.getStatus())) {
+            LOG.error("Gallery batch task status {}{}", task.getStatus(),
+                    task.getError() == null ? "" : " - " + task.getError().getMessage());
+        }
+
+        int accepted = 0;
+        for (NSubject subject : subjects) {
+            if (NBiometricStatus.OK.equals(subject.getStatus())) {
+                accepted++;
+            } else if (rejectionsLogged < MAX_REJECTIONS_LOGGED) {
+                rejectionsLogged++;
+                LOG.warn("Gallery rejected {}: {}", subject.getId(), subject.getStatus());
+            }
+        }
+        return accepted;
     }
 }
