@@ -410,7 +410,12 @@ public class BiometricController {
 
         ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
 
-        NBiometricClient identifcationClient = identificationGallery.upToDateClient();
+        NBiometricClient identifcationClient = identificationGallery.upToDateClientOrNull();
+        if (identifcationClient == null) {
+            clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
+            clientIdentificationDTO.setMessage("Fingerprint gallery is still loading, please try again shortly");
+            return clientIdentificationDTO;
+        }
 
         NBiometricStatus s = identifcationClient.identify(subject);
         if (s.equals(NBiometricStatus.OK)) {
