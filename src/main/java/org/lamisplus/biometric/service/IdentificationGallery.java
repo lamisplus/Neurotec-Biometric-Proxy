@@ -22,6 +22,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,8 +34,11 @@ public class IdentificationGallery {
     private static final int BATCH_SIZE = 500;
     private static final int PROGRESS_EVERY = 10000;
 
+    private static final int WAIT_FOR_GALLERY_SECONDS = 5;
+
     private final BiometricRepository biometricRepository;
     private final NeurotecProperties neurotecProperties;
+    private final ReentrantLock lock = new ReentrantLock();
 
     private NBiometricClient client;
     private final Set<String> enrolled = new HashSet<>();
@@ -47,18 +52,42 @@ public class IdentificationGallery {
     public void warmUp() {
         Thread warmUp = new Thread(() -> {
             LOG.info("Warming the identification gallery");
+            lock.lock();
             try {
                 upToDateClient();
             } catch (Exception e) {
                 LOG.error("Could not warm the identification gallery, the first recall will build it: {}",
                         e.getMessage(), e);
+            } finally {
+                lock.unlock();
             }
         }, "identification-gallery-warmup");
         warmUp.setDaemon(true);
         warmUp.start();
     }
 
-    public synchronized NBiometricClient upToDateClient() {
+    /**
+     * Returns null rather than queueing behind a build in progress. A recall that waits minutes
+     * for the start-up warm-up is indistinguishable from a hung request at the UI.
+     */
+    public NBiometricClient upToDateClientOrNull() {
+        try {
+            if (!lock.tryLock(WAIT_FOR_GALLERY_SECONDS, TimeUnit.SECONDS)) {
+                LOG.warn("Identification gallery is still building; skipping this recall");
+                return null;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        try {
+            return upToDateClient();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private NBiometricClient upToDateClient() {
         List<String> currentIds = biometricRepository.getIdentificationGalleryIds();
 
         if (client == null || !currentIds.containsAll(enrolled)) {
@@ -80,7 +109,7 @@ public class IdentificationGallery {
      * separates "the print is not visible to this database" from "it is enrolled but did
      * not match".
      */
-    public synchronized Map<String, Object> status(String personUuid) {
+    public Map<String, Object> status(String personUuid) {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("galleryBuilt", client != null);
         report.put("enrolledCount", enrolled.size());
