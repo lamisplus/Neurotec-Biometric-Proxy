@@ -40,6 +40,7 @@ lamis:
 lamisplus:
   neurotec:
     plugin-search-path: 'C:\neurotec\neurotec\neurotec\Bin\Win64_x64'
+    identification-threshold: 60
     license-server: /local
     license-port: 5000
     license-components:

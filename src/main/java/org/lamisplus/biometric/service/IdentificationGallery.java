@@ -88,7 +88,9 @@ public class IdentificationGallery {
     }
 
     private NBiometricClient upToDateClient() {
-        List<String> currentIds = biometricRepository.getIdentificationGalleryIds();
+        // A Set, not the List the query returns: containsAll against a List is a linear scan
+        // per element, which on a full gallery costs minutes on every recall.
+        Set<String> currentIds = new HashSet<>(biometricRepository.getIdentificationGalleryIds());
 
         if (client == null || !currentIds.containsAll(enrolled)) {
             // Top-up cannot express a removal, so anything archived or deleted forces a rebuild.
