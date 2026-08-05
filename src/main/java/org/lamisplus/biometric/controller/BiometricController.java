@@ -356,9 +356,7 @@ public class BiometricController {
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
                 .map(fingerPrint -> {
                     NSubject s = new NSubject();
-                    byte [] template  = fingerPrint.getTemplate();
-                    template[25] = 0x00;
-                    s.setTemplateBuffer(new NBuffer(template));
+                    s.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
                     s.setId(fingerPrint.getId());
                     s.setProperty("templateType", fingerPrint.getTemplateType());
                     s.setProperty("personUuid", fingerPrint.getPersonUuid());
@@ -474,9 +472,7 @@ public class BiometricController {
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
                 .map(fingerPrint -> {
                     NSubject subject = new NSubject();
-                    byte [] template  = fingerPrint.getTemplate();
-                    template[25] = 0x00;
-                    subject.setTemplateBuffer(new NBuffer(template));
+                    subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
                     subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
                     return subject;
                 })

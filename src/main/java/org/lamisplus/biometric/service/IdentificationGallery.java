@@ -163,6 +163,11 @@ public class IdentificationGallery {
         }
         // Recorded even when a template was skipped, so a bad row is not retried on every recall.
         enrolled.addAll(ids);
+        int rejected = ids.size() - enrolledNow;
+        if (rejected > 0) {
+            LOG.warn("Gallery: {} of {} fingerprint(s) were rejected by the SDK and cannot be matched",
+                    rejected, ids.size());
+        }
         LOG.info("Gallery: enrolled {} fingerprint(s) in {}ms, {} in total",
                 enrolledNow, System.currentTimeMillis() - start, enrolled.size());
     }
@@ -175,9 +180,7 @@ public class IdentificationGallery {
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
                 .map(fingerPrint -> {
                     NSubject subject = new NSubject();
-                    byte[] template = fingerPrint.getTemplate();
-                    template[25] = 0x00;
-                    subject.setTemplateBuffer(new NBuffer(template));
+                    subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
                     subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
                     return subject;
                 })
