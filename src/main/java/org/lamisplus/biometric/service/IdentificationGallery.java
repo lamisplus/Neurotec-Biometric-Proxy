@@ -196,8 +196,11 @@ public class IdentificationGallery {
         List<Biometric> fingerprints = new ArrayList<>();
         biometricRepository.findAllById(ids).forEach(fingerprints::add);
 
-        List<NSubject> subjects = fingerprints.stream()
+        List<Biometric> usable = fingerprints.stream()
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
+                .collect(Collectors.toList());
+
+        List<NSubject> subjects = usable.stream()
                 .map(fingerPrint -> {
                     NSubject subject = new NSubject();
                     subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
@@ -230,14 +233,37 @@ public class IdentificationGallery {
         }
 
         int accepted = 0;
-        for (NSubject subject : subjects) {
+        for (int i = 0; i < subjects.size(); i++) {
+            NSubject subject = subjects.get(i);
             if (NBiometricStatus.OK.equals(subject.getStatus())) {
                 accepted++;
             } else if (rejectionsLogged < MAX_REJECTIONS_LOGGED) {
                 rejectionsLogged++;
-                LOG.warn("Gallery rejected {}: {}", subject.getId(), subject.getStatus());
+                byte[] template = usable.get(i).getTemplate();
+                // The leading bytes name the format, which is what decides whether a rejected
+                // template can be converted or has to be captured again.
+                LOG.warn("Gallery rejected {} status={} bytes={} header={} length={}",
+                        subject.getId(), subject.getStatus(),
+                        leadingBytesHex(template), printableHeader(template), template.length);
             }
         }
         return accepted;
+    }
+
+    private static String leadingBytesHex(byte[] template) {
+        StringBuilder hex = new StringBuilder();
+        for (int i = 0; i < Math.min(12, template.length); i++) {
+            hex.append(String.format("%02x", template[i]));
+        }
+        return hex.toString();
+    }
+
+    private static String printableHeader(byte[] template) {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < Math.min(12, template.length); i++) {
+            char c = (char) (template[i] & 0xFF);
+            text.append(c >= 0x20 && c < 0x7F ? c : '.');
+        }
+        return text.toString();
     }
 }
