@@ -88,6 +88,10 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     List<String> getIdentificationGalleryIdsForPerson(String personUuid);
 
+    /** No filters, so "excluded by a predicate" can be told apart from "not in this database". */
+    @Query(value = "select id from biometric where person_uuid = ?1", nativeQuery = true)
+    List<String> getAllPrintIdsForPerson(String personUuid);
+
     @Query(value="SELECT id, first_name AS firstName, surname AS surName, hospital_number AS hospitalNumber, sex " +
             "FROM patient_person WHERE uuid=?1", nativeQuery = true)
     Optional<ClientIdentificationProject> getBiometricPersonData(String personUuid);

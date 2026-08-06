@@ -16,6 +16,8 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -42,6 +44,7 @@ public class IdentificationGallery {
 
     private final BiometricRepository biometricRepository;
     private final NeurotecProperties neurotecProperties;
+    private final DataSource dataSource;
     private final ReentrantLock lock = new ReentrantLock();
 
     private NBiometricClient client;
@@ -122,15 +125,26 @@ public class IdentificationGallery {
         report.put("identificationThreshold", neurotecProperties.getIdentificationThreshold());
         report.put("printsInDatabase", biometricRepository.getIdentificationGalleryIds().size());
 
+        report.put("database", databaseUrl());
+
         if (personUuid != null && !personUuid.trim().isEmpty()) {
             List<String> ids = biometricRepository.getIdentificationGalleryIdsForPerson(personUuid.trim());
             List<String> inGallery = ids.stream().filter(enrolled::contains).collect(Collectors.toList());
             report.put("personUuid", personUuid.trim());
+            report.put("personPrintsAnyState", biometricRepository.getAllPrintIdsForPerson(personUuid.trim()).size());
             report.put("personPrintsInDatabase", ids.size());
             report.put("personPrintsInGallery", inGallery.size());
             report.put("personPrintIds", ids);
         }
         return report;
+    }
+
+    private String databaseUrl() {
+        try (Connection connection = dataSource.getConnection()) {
+            return connection.getMetaData().getURL();
+        } catch (Exception e) {
+            return "unknown: " + e.getMessage();
+        }
     }
 
     private void rebuild() {
@@ -172,6 +186,12 @@ public class IdentificationGallery {
                 enrolledNow, System.currentTimeMillis() - start, enrolled.size());
     }
 
+    private static byte[] normalisedViewNumber(byte[] template) {
+        byte[] copy = template.clone();
+        copy[25] = 0x00;
+        return copy;
+    }
+
     private int enrolBatch(List<String> ids) {
         List<Biometric> fingerprints = new ArrayList<>();
         biometricRepository.findAllById(ids).forEach(fingerprints::add);
@@ -180,7 +200,7 @@ public class IdentificationGallery {
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
                 .map(fingerPrint -> {
                     NSubject subject = new NSubject();
-                    subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                    subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
                     subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
                     return subject;
                 })
@@ -202,8 +222,6 @@ public class IdentificationGallery {
             return 0;
         }
 
-        // performTask reports failure through a status, not an exception, so an unchecked
-        // task can silently enrol nothing and leave identification searching an empty gallery.
         if (!NBiometricStatus.OK.equals(task.getStatus())) {
             LOG.error("Gallery batch task status {}{}", task.getStatus(),
                     task.getError() == null ? "" : " - " + task.getError().getMessage());

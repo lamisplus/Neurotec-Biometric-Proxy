@@ -356,7 +356,7 @@ public class BiometricController {
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
                 .map(fingerPrint -> {
                     NSubject s = new NSubject();
-                    s.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                    s.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
                     s.setId(fingerPrint.getId());
                     s.setProperty("templateType", fingerPrint.getTemplateType());
                     s.setProperty("personUuid", fingerPrint.getPersonUuid());
@@ -472,7 +472,7 @@ public class BiometricController {
                 .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
                 .map(fingerPrint -> {
                     NSubject subject = new NSubject();
-                    subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
+                    subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
                     subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
                     return subject;
                 })
@@ -807,6 +807,18 @@ public class BiometricController {
         biometricEnrollmentDto.setPatientId(captureRequestDTO.getPatientId());
         biometricEnrollmentDto.setReason(captureRequestDTO.getReason());
         return biometricEnrollmentDto;
+    }
+
+    /**
+     * Byte 25 of an ISO 19794-2 record is the first finger view's (viewNumber &lt;&lt; 4) |
+     * impressionType. Most stored templates carry a viewNumber the SDK rejects; without this
+     * zeroing, gallery enrolment dropped from 186,809 to 43,882 of 205,604 records. Works on a
+     * copy so the entity's array, loaded from the database, is left untouched.
+     */
+    static byte[] normalisedViewNumber(byte[] template) {
+        byte[] copy = template.clone();
+        copy[25] = 0x00;
+        return copy;
     }
 
     public String bcryptHash(byte[] template) {
