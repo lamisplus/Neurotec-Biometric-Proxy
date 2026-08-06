@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lamisplus.biometric.config.NeurotecProperties;
 import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
+import org.lamisplus.biometric.util.StoredTemplate;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -38,9 +39,8 @@ public class IdentificationGallery {
     private static final int PROGRESS_EVERY = 10000;
 
     private static final int WAIT_FOR_GALLERY_SECONDS = 5;
-    private static final int MAX_REJECTIONS_LOGGED = 20;
 
-    private int rejectionsLogged = 0;
+    private int unreadable = 0;
 
     private final BiometricRepository biometricRepository;
     private final NeurotecProperties neurotecProperties;
@@ -165,25 +165,28 @@ public class IdentificationGallery {
 
     private void enrol(List<String> ids) {
         long start = System.currentTimeMillis();
-        int enrolledNow = 0;
+        unreadable = 0;
+        int loadedNow = 0;
         int nextProgressAt = PROGRESS_EVERY;
         for (int from = 0; from < ids.size(); from += BATCH_SIZE) {
             List<String> batch = ids.subList(from, Math.min(ids.size(), from + BATCH_SIZE));
-            enrolledNow += enrolBatch(batch);
-            if (enrolledNow >= nextProgressAt) {
-                LOG.info("Gallery: {} of {} fingerprint(s) enrolled", enrolledNow, ids.size());
+            loadedNow += enrolBatch(batch);
+            if (loadedNow >= nextProgressAt) {
+                LOG.info("Gallery: {} of {} fingerprint(s) loaded into the matcher", loadedNow, ids.size());
                 nextProgressAt += PROGRESS_EVERY;
             }
         }
         // Recorded even when a template was skipped, so a bad row is not retried on every recall.
         enrolled.addAll(ids);
-        int rejected = ids.size() - enrolledNow;
-        if (rejected > 0) {
-            LOG.warn("Gallery: {} of {} fingerprint(s) were rejected by the SDK and cannot be matched. "
-                    + "Enable DEBUG on this logger for the per-batch reason.", rejected, ids.size());
+
+        int notLoaded = ids.size() - loadedNow;
+        if (notLoaded > 0) {
+            LOG.warn("Gallery: {} of {} fingerprint(s) could not be loaded into the matcher and will never "
+                            + "match ({} in an unreadable template format). Enable DEBUG for the SDK reason.",
+                    notLoaded, ids.size(), unreadable);
         }
-        LOG.info("Gallery: enrolled {} fingerprint(s) in {}ms, {} in total",
-                enrolledNow, System.currentTimeMillis() - start, enrolled.size());
+        LOG.info("Gallery: {} of {} fingerprint(s) loaded into the matcher in {}ms, {} searchable in total",
+                loadedNow, ids.size(), System.currentTimeMillis() - start, enrolled.size() - unreadable);
     }
 
     private static byte[] normalisedViewNumber(byte[] template) {
@@ -196,18 +199,18 @@ public class IdentificationGallery {
         List<Biometric> fingerprints = new ArrayList<>();
         biometricRepository.findAllById(ids).forEach(fingerprints::add);
 
-        List<Biometric> usable = fingerprints.stream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
-                .collect(Collectors.toList());
-
-        List<NSubject> subjects = usable.stream()
-                .map(fingerPrint -> {
-                    NSubject subject = new NSubject();
-                    subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
-                    subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
-                    return subject;
-                })
-                .collect(Collectors.toList());
+        List<NSubject> subjects = new ArrayList<>();
+        for (Biometric fingerPrint : fingerprints) {
+            byte[] record = StoredTemplate.toFmr(fingerPrint.getTemplate());
+            if (record == null || record.length <= 25) {
+                unreadable++;
+                continue;
+            }
+            NSubject subject = new NSubject();
+            subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(record)));
+            subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
+            subjects.add(subject);
+        }
 
         NBiometricTask task = client.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
         for (NSubject subject : subjects) {
@@ -233,37 +236,11 @@ public class IdentificationGallery {
         }
 
         int accepted = 0;
-        for (int i = 0; i < subjects.size(); i++) {
-            NSubject subject = subjects.get(i);
+        for (NSubject subject : subjects) {
             if (NBiometricStatus.OK.equals(subject.getStatus())) {
                 accepted++;
-            } else if (rejectionsLogged < MAX_REJECTIONS_LOGGED) {
-                rejectionsLogged++;
-                byte[] template = usable.get(i).getTemplate();
-                // The leading bytes name the format, which is what decides whether a rejected
-                // template can be converted or has to be captured again.
-                LOG.warn("Gallery rejected {} status={} bytes={} header={} length={}",
-                        subject.getId(), subject.getStatus(),
-                        leadingBytesHex(template), printableHeader(template), template.length);
             }
         }
         return accepted;
-    }
-
-    private static String leadingBytesHex(byte[] template) {
-        StringBuilder hex = new StringBuilder();
-        for (int i = 0; i < Math.min(12, template.length); i++) {
-            hex.append(String.format("%02x", template[i]));
-        }
-        return hex.toString();
-    }
-
-    private static String printableHeader(byte[] template) {
-        StringBuilder text = new StringBuilder();
-        for (int i = 0; i < Math.min(12, template.length); i++) {
-            char c = (char) (template[i] & 0xFF);
-            text.append(c >= 0x20 && c < 0x7F ? c : '.');
-        }
-        return text.toString();
     }
 }

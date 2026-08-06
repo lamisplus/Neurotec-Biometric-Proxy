@@ -24,6 +24,7 @@ import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.service.FingerScannerManager;
 import org.lamisplus.biometric.service.IdentificationGallery;
+import org.lamisplus.biometric.util.StoredTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -353,10 +354,10 @@ public class BiometricController {
         List<Biometric> biometrics = biometricRepository.getPatientBaselineFingerprints(patientId);
 
         List<NSubject> subjects = biometrics.parallelStream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
+                .filter(fingerPrint -> readableRecord(fingerPrint.getTemplate()) != null)
                 .map(fingerPrint -> {
                     NSubject s = new NSubject();
-                    s.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
+                    s.setTemplateBuffer(new NBuffer(normalisedViewNumber(readableRecord(fingerPrint.getTemplate()))));
                     s.setId(fingerPrint.getId());
                     s.setProperty("templateType", fingerPrint.getTemplateType());
                     s.setProperty("personUuid", fingerPrint.getPersonUuid());
@@ -469,10 +470,10 @@ public class BiometricController {
         List<Biometric> baselinePrints = biometricRepository.getPatientBaselineFingerprints(patientId);
 
         List<NSubject> baselineSubjects = baselinePrints.parallelStream()
-                .filter(fingerPrint -> fingerPrint.getTemplate() != null && fingerPrint.getTemplate().length > 25)
+                .filter(fingerPrint -> readableRecord(fingerPrint.getTemplate()) != null)
                 .map(fingerPrint -> {
                     NSubject subject = new NSubject();
-                    subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(fingerPrint.getTemplate())));
+                    subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(readableRecord(fingerPrint.getTemplate()))));
                     subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
                     return subject;
                 })
@@ -815,6 +816,11 @@ public class BiometricController {
      * zeroing, gallery enrolment dropped from 186,809 to 43,882 of 205,604 records. Works on a
      * copy so the entity's array, loaded from the database, is left untouched.
      */
+    private static byte[] readableRecord(byte[] stored) {
+        byte[] record = StoredTemplate.toFmr(stored);
+        return record != null && record.length > 25 ? record : null;
+    }
+
     static byte[] normalisedViewNumber(byte[] template) {
         byte[] copy = template.clone();
         copy[25] = 0x00;
