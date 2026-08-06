@@ -179,8 +179,8 @@ public class IdentificationGallery {
         enrolled.addAll(ids);
         int rejected = ids.size() - enrolledNow;
         if (rejected > 0) {
-            LOG.warn("Gallery: {} of {} fingerprint(s) were rejected by the SDK and cannot be matched",
-                    rejected, ids.size());
+            LOG.warn("Gallery: {} of {} fingerprint(s) were rejected by the SDK and cannot be matched. "
+                    + "Enable DEBUG on this logger for the per-batch reason.", rejected, ids.size());
         }
         LOG.info("Gallery: enrolled {} fingerprint(s) in {}ms, {} in total",
                 enrolledNow, System.currentTimeMillis() - start, enrolled.size());
@@ -222,8 +222,10 @@ public class IdentificationGallery {
             return 0;
         }
 
+        // One line per batch is noise; the per-batch reason repeats and the run is summarised
+        // by the rejected count in enrol().
         if (!NBiometricStatus.OK.equals(task.getStatus())) {
-            LOG.error("Gallery batch task status {}{}", task.getStatus(),
+            LOG.debug("Gallery batch task status {}{}", task.getStatus(),
                     task.getError() == null ? "" : " - " + task.getError().getMessage());
         }
 
