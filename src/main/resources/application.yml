@@ -1,5 +1,5 @@
 application:
-  library-path: 'C:\neurotec\neurotec\neurotec\Bin\Win64_x64'
+  library-path: XXXXXXXX
   server-url: http://localhost
   quality: 61
 spring:
@@ -8,9 +8,9 @@ spring:
       enable: true
   datasource:
     driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: admin
-    url: jdbc:postgresql://localhost:5432/bauchidb
+    username: XXXXXXXX
+    password: XXXXXXXX
+    url: jdbc:postgresql://localhost:5432/XXXXXX
     hibernate:
       ddl-auto: none
       event.merge.entry_copy_observer: allow
@@ -39,7 +39,7 @@ lamis:
   module-path: modules
 lamisplus:
   neurotec:
-    plugin-search-path: 'C:\neurotec\neurotec\neurotec\Bin\Win64_x64'
+    plugin-search-path: XXXXXXXX
     identification-threshold: 96
     license-server: /local
     license-port: 5000
