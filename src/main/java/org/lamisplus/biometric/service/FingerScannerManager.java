@@ -16,6 +16,7 @@ import org.lamisplus.biometric.domain.enumeration.ErrorCode;
 import org.lamisplus.biometric.util.LibraryManager;
 import org.lamisplus.biometric.util.ReaderMatcher;
 import org.lamisplus.biometric.util.Utils;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -28,6 +29,7 @@ import java.util.Optional;
 
 @Slf4j
 @Service
+@DependsOn("applicationProperties")
 @RequiredArgsConstructor
 public class FingerScannerManager {
 
@@ -38,6 +40,12 @@ public class FingerScannerManager {
     @PostConstruct
     public void init() {
         LibraryManager.initLibraryPath();
+        if (StringUtils.isBlank(LibraryManager.getLibraryPath())) {
+            LOG.error("No Neurotec native library path could be resolved. Set application.library-path in "
+                    + "biometric-db-config.yml to the SDK architecture folder, for example "
+                    + "C:\\neurotec\\Bin\\Win64_x64. Its parent folder must be named Bin. Without it the SDK "
+                    + "cannot load and every biometric operation will fail.");
+        }
         obtainLicenses();
         initDeviceManager();
         logDiscoveredDevices();
