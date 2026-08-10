@@ -41,6 +41,7 @@ public class IdentificationGallery {
     private static final int WAIT_FOR_GALLERY_SECONDS = 5;
 
     private int unreadable = 0;
+    private int searchable = 0;
 
     private final BiometricRepository biometricRepository;
     private final NeurotecProperties neurotecProperties;
@@ -161,6 +162,7 @@ public class IdentificationGallery {
         client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         enrolled.clear();
+        searchable = 0;
     }
 
     private void enrol(List<String> ids) {
@@ -185,8 +187,9 @@ public class IdentificationGallery {
                             + "match ({} in an unreadable template format). Enable DEBUG for the SDK reason.",
                     notLoaded, ids.size(), unreadable);
         }
+        searchable += loadedNow;
         LOG.info("Gallery: {} of {} fingerprint(s) loaded into the matcher in {}ms, {} searchable in total",
-                loadedNow, ids.size(), System.currentTimeMillis() - start, enrolled.size() - unreadable);
+                loadedNow, ids.size(), System.currentTimeMillis() - start, searchable);
     }
 
     private static byte[] normalisedViewNumber(byte[] template) {

@@ -40,7 +40,7 @@ public class FingerScannerManager {
     @PostConstruct
     public void init() {
         LibraryManager.initLibraryPath();
-        if (StringUtils.isBlank(LibraryManager.getLibraryPath())) {
+        if (StringUtils.isBlank(System.getProperty("jna.library.path"))) {
             LOG.error("No Neurotec native library path could be resolved. Set application.library-path in "
                     + "biometric-db-config.yml to the SDK architecture folder, for example "
                     + "C:\\neurotec\\Bin\\Win64_x64. Its parent folder must be named Bin. Without it the SDK "
