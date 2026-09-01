@@ -83,6 +83,27 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     List<String> getIdentificationGalleryIds();
 
+    /**
+     * Change probe for the identification gallery, so a recall need not pull every id back. Count
+     * alone would miss an insert and a delete that cancel out between two checks, hence the stamp.
+     * Opaque - compare for equality only.
+     *
+     * <p>Indexable as: {@code create index concurrently biometric_gallery_idx on biometric
+     * (last_modified_date) where archived = 0 and version_iso_20 = true and template is not
+     * null}.</p>
+     */
+    @Query(value = "select count(*) || '@' || coalesce(max(last_modified_date)::text, '-') " +
+            "from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null",
+            nativeQuery = true)
+    String getIdentificationGalleryFingerprint();
+
+    /** Number, not long: a native count arrives from Hibernate as a BigInteger. */
+    @Query(value = "select count(*) from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null",
+            nativeQuery = true)
+    Number countIdentificationGalleryPrints();
+
     @Query(value = "select id from biometric where archived = 0 " +
             "and version_iso_20 = true and template is not null and person_uuid = ?1",
             nativeQuery = true)

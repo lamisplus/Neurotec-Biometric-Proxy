@@ -51,6 +51,9 @@ public class IdentificationGallery {
     private NBiometricClient client;
     private final Set<String> enrolled = new HashSet<>();
 
+    /** The database state the gallery was last built from; compared for equality only. */
+    private String galleryFingerprint;
+
     /**
      * Builds the gallery off the request thread once the application is serving, so the first
      * recall of the day does not wait minutes for it. A recall arriving mid-build blocks on
@@ -96,6 +99,11 @@ public class IdentificationGallery {
     }
 
     private NBiometricClient upToDateClient() {
+        String fingerprint = biometricRepository.getIdentificationGalleryFingerprint();
+        if (client != null && fingerprint != null && fingerprint.equals(galleryFingerprint)) {
+            return client;
+        }
+
         // A Set, not the List the query returns: containsAll against a List is a linear scan
         // per element, which on a full gallery costs minutes on every recall.
         Set<String> currentIds = new HashSet<>(biometricRepository.getIdentificationGalleryIds());
@@ -111,6 +119,9 @@ public class IdentificationGallery {
         if (!missing.isEmpty()) {
             enrol(missing);
         }
+        // The value read before the build, not after: a print written mid-build then leaves the
+        // two out of step and is topped up on the next recall, rather than being missed for good.
+        galleryFingerprint = fingerprint;
         return client;
     }
 
@@ -124,7 +135,8 @@ public class IdentificationGallery {
         report.put("galleryBuilt", client != null);
         report.put("enrolledCount", enrolled.size());
         report.put("identificationThreshold", neurotecProperties.getIdentificationThreshold());
-        report.put("printsInDatabase", biometricRepository.getIdentificationGalleryIds().size());
+        report.put("printsInDatabase", biometricRepository.countIdentificationGalleryPrints());
+        report.put("galleryFingerprint", galleryFingerprint);
 
         report.put("database", databaseUrl());
 
@@ -162,6 +174,7 @@ public class IdentificationGallery {
         client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         enrolled.clear();
+        galleryFingerprint = null;
         searchable = 0;
     }
 
