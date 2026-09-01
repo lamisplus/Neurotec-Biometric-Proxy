@@ -608,11 +608,19 @@ public class BiometricController {
             deduplicationResponse.setMessageType("SUCCESS");
             deduplicationResponse.setMessage("Deduplication process successful");
             deduplicationResponse.setNumberOfMatchedFingers(numberOfMatch.get());
-            deduplication.clear();
 
         }catch (Throwable th){
             th.printStackTrace();
             LOG.error("An error occurred *********** {}", th.getMessage());
+        } finally {
+            // clear() empties the subject database but leaves the native engine alive.
+            if (deduplication != null) {
+                try {
+                    deduplication.dispose();
+                } catch (Exception e) {
+                    LOG.warn("Could not dispose the deduplication engine: {}", e.getMessage());
+                }
+            }
         }
         return deduplicationResponse;
     }
