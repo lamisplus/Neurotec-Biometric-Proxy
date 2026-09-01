@@ -1,5 +1,6 @@
 package org.lamisplus.biometric.service;
 
+import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.devices.NDevice;
 import com.neurotec.devices.NDeviceManager;
 import com.neurotec.devices.NDeviceType;
@@ -26,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -36,6 +38,13 @@ public class FingerScannerManager {
     private final NeurotecProperties neurotecProperties;
 
     private NDeviceManager deviceManager;
+
+    /**
+     * Resolving enumerates the device manager and reads native properties off every device, and
+     * capture does it on every request. An unplugged scanner stops reporting itself as available,
+     * which is what evicts the entry.
+     */
+    private final Map<String, NFScanner> resolvedScanners = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void init() {
@@ -148,6 +157,69 @@ public class FingerScannerManager {
     }
 
     public Optional<NFScanner> resolveScanner(String reader) {
+        // The boot check passes the encoded reader name, capture passes the decoded one.
+        String key = ReaderMatcher.decode(reader);
+        NFScanner cached = resolvedScanners.get(key);
+        if (cached != null) {
+            if (isUsable(cached)) {
+                return Optional.of(cached);
+            }
+            resolvedScanners.remove(key, cached);
+        }
+        Optional<NFScanner> resolved = lookUpScanner(reader);
+        resolved.ifPresent(scanner -> resolvedScanners.put(key, scanner));
+        return resolved;
+    }
+
+    /**
+     * Re-assigning the scanner closes and reopens the device and restarts its finger detection,
+     * so a finger already resting on the platen has to be lifted and placed again before the SDK
+     * sees it. Hence only on a genuine change.
+     *
+     * @return false when no such scanner is attached, in which case the caller must not capture.
+     */
+    public boolean bindScanner(NBiometricClient client, String reader) {
+        Optional<NFScanner> resolved = resolveScanner(reader);
+        if (!resolved.isPresent()) {
+            return false;
+        }
+        NFScanner scanner = resolved.get();
+        if (isSameDevice(client.getFingerScanner(), scanner)) {
+            return true;
+        }
+        client.setFingerScanner(scanner);
+        LOG.info("Capture client bound to scanner {}", deviceId(scanner));
+        return true;
+    }
+
+    private static boolean isUsable(NFScanner scanner) {
+        try {
+            return scanner.isAvailable();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean isSameDevice(NFScanner current, NFScanner wanted) {
+        if (current == null) {
+            return false;
+        }
+        if (current == wanted) {
+            return true;
+        }
+        String currentId = deviceId(current);
+        return currentId != null && currentId.equals(deviceId(wanted));
+    }
+
+    private static String deviceId(NFScanner scanner) {
+        try {
+            return scanner.getId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Optional<NFScanner> lookUpScanner(String reader) {
         List<NFScanner> scanners = getFingerScanners();
         if (scanners.isEmpty()) {
             LOG.warn("No finger scanner is visible to the Neurotec device manager (asked for '{}')", reader);

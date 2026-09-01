@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neurotec.biometrics.*;
 import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.biometrics.standards.*;
-import com.neurotec.devices.NFScanner;
 import com.neurotec.images.NImage;
 import com.neurotec.images.NImageFormat;
 import com.neurotec.io.NBuffer;
@@ -101,6 +100,9 @@ public class BiometricController {
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/boot")
     public ErrorCodeDTO boot(@RequestParam String reader) {
         //GET - http://localhost:8282/api/v1/biometrics/neurotec/boot?reader=Futronic FS80H %231
+        // Binds as well as reports: the frontend calls this before capturing, so the device
+        // opens here rather than on the first finger presented.
+        fingerScannerManager.bindScanner(client, reader);
         return fingerScannerManager.bootStatus(reader);
     }
 
@@ -768,13 +770,8 @@ public class BiometricController {
      * in which case the caller must not attempt a capture.
      */
     private boolean scannerIsNotSet(String reader) {
-        LOG.info("Reader from REST **** {}", reader);
-        Optional<NFScanner> scanner = fingerScannerManager.resolveScanner(reader);
-        if (scanner.isPresent()) {
-            client.setFingerScanner(scanner.get());
-            return false;
-        }
-        return true;
+        LOG.debug("Reader from REST **** {}", reader);
+        return !fingerScannerManager.bindScanner(client, reader);
     }
 
     private void createClient() {
