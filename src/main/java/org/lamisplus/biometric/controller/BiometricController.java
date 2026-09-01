@@ -771,6 +771,14 @@ public class BiometricController {
         client.setMatchingThreshold(96);
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         client.setFingersTemplateSize(NTemplateSize.LARGE);
+        // Explicitly off: nothing reads them, and each is extra work on every capture.
+        client.setFingersCalculateNFIQ(false);
+        client.setFingersDeterminePatternClass(false);
+        client.setFingersReturnBinarizedImage(false);
+        client.setFingersReturnRidgeSkeletonImage(false);
+        // The controller runs its own duplicate check; the SDK's repeats it inside the capture
+        // loop and reports a duplicate by asking for the finger again.
+        client.setFingersCheckForDuplicatesWhenCapturing(false);
         client.initialize();
     }
 
