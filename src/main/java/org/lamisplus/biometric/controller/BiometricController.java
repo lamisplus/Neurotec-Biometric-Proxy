@@ -39,6 +39,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -266,6 +267,10 @@ public class BiometricController {
 
                     }
 
+                    // Cost 12 is a fixed quarter-second or more, and nothing below depends on it.
+                    CompletableFuture<String> hashed =
+                            CompletableFuture.supplyAsync(() -> bcryptHash(isoTemplate));
+
                     //Checking if fingerprint is already captured in the current capturing process
                     status = deduplicateIfFingerIsAlreadyCapturedInTheCurrentProcess(
                             subject, captureRequestDTO
@@ -289,7 +294,7 @@ public class BiometricController {
                     CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
                     capturedBiometricDTO.setTemplate(isoTemplate);
                     capturedBiometricDTO.setTemplateType(captureRequestDTO.getTemplateType());
-                    capturedBiometricDTO.setHashed(bcryptHash(capturedBiometricDTO.getTemplate()));
+                    capturedBiometricDTO.setHashed(hashed.join());
                     capturedBiometricDTO.setImageQuality((int) imageQuality);
                     if (matchData != null && !matchData.isEmpty()){
                         capturedBiometricDTO.setMatchBiometricId(matchData.get("matchBiometricId").toString());
