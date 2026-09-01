@@ -717,44 +717,39 @@ public class BiometricController {
             NSubject subject,
             CaptureRequestDTO captureRequestDTO
             ) {
-        NBiometricClient biometricClient = null;
-        biometricClient = new NBiometricClient();
-        biometricClient.setMatchingThreshold(144);
-        biometricClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-
         Set<CapturedBiometricDto> templates = captureRequestDTO.getCapturedBiometricsList();
-        List<NSubject> currentGallery = new ArrayList<>();
-        for (CapturedBiometricDto template : templates) {
-            //String id = captureRequestDTO.getId();
-            NSubject gallery = new NSubject();
+        if (templates.isEmpty()) {
+            return NBiometricStatus.MATCH_NOT_FOUND;
+        }
 
-            String id = UUID.randomUUID().toString();
-            byte [] template1  = template.getTemplate();
-            template1[25] = 0x00;
-            gallery.setTemplateBuffer(new NBuffer(template1));
-            gallery.setId(id);
-            currentGallery.add(gallery);
+        NBiometricClient biometricClient = new NBiometricClient();
+        try {
+            biometricClient.setMatchingThreshold(144);
+            biometricClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
 
             NBiometricTask task = biometricClient.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
-            task.getSubjects().addAll(currentGallery);
-            // LOG.info("Galley Size is **** {}", currentGallery.size());
+            for (CapturedBiometricDto template : templates) {
+                try {
+                    NSubject gallery = new NSubject();
+                    gallery.setTemplateBuffer(new NBuffer(normalisedViewNumber(template.getTemplate())));
+                    gallery.setId(UUID.randomUUID().toString());
+                    task.getSubjects().add(gallery);
+                } catch (Exception e) {
+                    LOG.warn("Could not add an already captured finger to the in-session gallery: {}",
+                            e.getMessage());
+                }
+            }
+
             try {
                 biometricClient.performTask(task);
             } catch (Exception e) {
-                currentGallery.remove(gallery);
+                LOG.error("Enrolling the in-session gallery failed: {}", e.getMessage());
             }
-            try {
-                if (!task.getStatus().equals(NBiometricStatus.OK)) {
-                    currentGallery.remove(gallery);
-                }
-            } catch (Exception e) {
-                currentGallery.remove(gallery);
-            }
+
+            return biometricClient.identify(subject);
+        } finally {
+            biometricClient.dispose();
         }
-        // Identifying with existing fingerprints
-        NBiometricStatus s = biometricClient.identify(subject);
-        biometricClient.clear();
-        return s;
     }
 
     /**
