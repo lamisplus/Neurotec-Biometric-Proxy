@@ -86,9 +86,10 @@ public class BiometricController {
 
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/diagnostics")
-    public ResponseEntity<Map<String, Object>> diagnostics() {
-        //GET - http://localhost:8282/api/v1/biometrics/neurotec/diagnostics
-        return ResponseEntity.ok(fingerScannerManager.diagnostics());
+    public ResponseEntity<Map<String, Object>> diagnostics(
+            @RequestParam(required = false, defaultValue = "false") boolean deep) {
+        //GET - http://localhost:8282/api/v1/biometrics/neurotec/diagnostics[?deep=true]
+        return ResponseEntity.ok(fingerScannerManager.diagnostics(deep));
     }
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/gallery")
@@ -117,14 +118,8 @@ public class BiometricController {
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/angular/test")
     public ResponseEntity<Map<String, Object>> angularTest(@RequestParam String reader){
 
-        NBiometricClient testClient = null;
-        testClient = new NBiometricClient();
-        testClient.setMatchingThreshold(150);
-        testClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-        testClient.setFingersReturnBinarizedImage(true);
-        short s = 60;
-        testClient.setFingersQualityThreshold((byte) s);
-
+        // Shares the capture client deliberately: a second one would hold the same physical
+        // scanner open alongside it, and the two take turns losing the device.
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("message", "Hello, world!");
         responseData.put("status", HttpStatus.OK.value());
@@ -133,8 +128,6 @@ public class BiometricController {
             reader = URLDecoder.decode(reader, StandardCharsets.UTF_8.toString());
         } catch (UnsupportedEncodingException ignored) {
         }
-
-        fingerScannerManager.resolveScanner(reader).ifPresent(testClient::setFingerScanner);
 
         try (NSubject subject = new NSubject()) {
             final NFinger finger = new NFinger();
@@ -147,7 +140,7 @@ public class BiometricController {
                 return new ResponseEntity<>(responseData, HttpStatus.OK);
             }
 
-            NBiometricStatus status = testClient.capture(subject);
+            NBiometricStatus status = client.capture(subject);
 
             if (status.equals(NBiometricStatus.OK)) {
                 status = client.createTemplate(subject);
@@ -177,7 +170,6 @@ public class BiometricController {
                 LOG.info("Could not capture template");
             }
         }
-        testClient.dispose();
         // Return ResponseEntity with the map and HTTP status OK
         return new ResponseEntity<>(responseData, HttpStatus.OK);
     }

@@ -251,7 +251,11 @@ public class FingerScannerManager {
                 .build();
     }
 
-    public Map<String, Object> diagnostics() {
+    /**
+     * @param deep also enumerate every device type. That builds a second auto-plugging device
+     *             manager, which claims the scanner away from the capture client.
+     */
+    public Map<String, Object> diagnostics(boolean deep) {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("workingDirectory", Utils.getWorkingDirectory());
         report.put("derivedLibraryPath", LibraryManager.getLibraryPath());
@@ -293,7 +297,11 @@ public class FingerScannerManager {
             devices.add(describe(device));
         }
         report.put("devices", devices);
-        report.put("devicesOfEveryType", scanEveryDeviceType());
+        if (deep) {
+            report.put("devicesOfEveryType", scanEveryDeviceType());
+        } else {
+            report.put("devicesOfEveryType", "not scanned - add ?deep=true, but not while capturing");
+        }
         return report;
     }
 
