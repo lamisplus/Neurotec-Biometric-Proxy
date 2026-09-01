@@ -1,7 +1,5 @@
 package org.lamisplus.biometric.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neurotec.biometrics.*;
 import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.biometrics.standards.*;
@@ -282,13 +280,10 @@ public class BiometricController {
                     //Running deduplication against baseline fingerprints
                     LOG.info("Recapture choice ******* {}", recapture);
                     Map<String, Object> matchData = new HashMap<>();
-                    LOG.info("Biometric match is {}", matchData);
                     if(recapture){
-                        Deduplication recaptureDeduplication =
-                                deduplicationForRecapturedPrints(subject, captureRequestDTO.getPatientId(),
-                                        captureRequestDTO.getTemplateType(), captureRequestDTO.getDeduplication());
-                        result.setDeduplication(recaptureDeduplication);
-                        matchData = doClientVerification(captureRequestDTO.getPatientId(), subject, captureRequestDTO.getTemplateType());
+                        matchData = matchAgainstBaseline(subject, captureRequestDTO.getPatientId(),
+                                captureRequestDTO.getTemplateType(), captureRequestDTO.getDeduplication());
+                        result.setDeduplication(captureRequestDTO.getDeduplication());
                     }
 
                     CapturedBiometricDto capturedBiometricDTO = new CapturedBiometricDto();
@@ -337,64 +332,92 @@ public class BiometricController {
         return result;
     }
 
-    private Map<String, Object> doClientVerification(Long patientId, NSubject currentSubject, String templateType) {
-        NBiometricClient bc = null;
-        bc = new NBiometricClient();
-        bc.setMatchingThreshold(96);
-        bc.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-        // biometricClient.setFingersReturnBinarizedImage(true);
-        bc.setFingersQualityThreshold((byte) 75);
-
-        List<Biometric> biometrics = biometricRepository.getPatientBaselineFingerprints(patientId);
-
-        List<NSubject> subjects = biometrics.parallelStream()
-                .filter(fingerPrint -> readableRecord(fingerPrint.getTemplate()) != null)
-                .map(fingerPrint -> {
-                    NSubject s = new NSubject();
-                    s.setTemplateBuffer(new NBuffer(normalisedViewNumber(readableRecord(fingerPrint.getTemplate()))));
-                    s.setId(fingerPrint.getId());
-                    s.setProperty("templateType", fingerPrint.getTemplateType());
-                    s.setProperty("personUuid", fingerPrint.getPersonUuid());
-                    s.setProperty("id", fingerPrint.getId());
-                    s.setProperty("recapture", fingerPrint.getRecapture());
-                    return s;
-                })
-                .collect(Collectors.toList());
-
-
-        NBiometricTask t = bc.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
-        subjects
-                .forEach(sub -> {
-                    try {
-                        t.getSubjects().add(sub);
-                    } catch (Exception e) {
-                        t.getSubjects().remove(sub);
-                    }
-                });
-
+    /**
+     * Matches the captured print against the patient's own baseline prints. Mutates
+     * {@code deduplication} with the recapture counters as a side effect.
+     *
+     * @return the verification match data, or null when the print matches no baseline print.
+     */
+    @SneakyThrows
+    private Map<String, Object> matchAgainstBaseline(
+            NSubject nSubject, Long patientId, String recapturedTemplateType,
+            Deduplication deduplication
+    ) {
+        NBiometricClient biometricClient = new NBiometricClient();
         try {
-            bc.performTask(t);
-        } catch (Exception e){
-            e.printStackTrace();
-        }
+            biometricClient.setMatchingThreshold(96);
+            biometricClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
+            biometricClient.setFingersQualityThreshold((byte) 75);
 
-        NBiometricStatus status = bc.identify(currentSubject);
+            List<Biometric> baselinePrints = biometricRepository.getPatientBaselineFingerprints(patientId);
 
-        if(status.equals(NBiometricStatus.OK)) {
-            String matchBiometricId = currentSubject.getMatchingResults().get(0).getId();
-            String matchTemplateType = currentSubject.getMatchingResults().get(0).getProperty("templateType").toString();
-            String matchPersonUuid = currentSubject.getMatchingResults().get(0).getProperty("personUuid").toString();
-            Map<String, Object> map = new HashMap<>();
-            map.put("matchBiometricId", matchBiometricId);
-            map.put("matchPersonUuid", matchPersonUuid);
-            String matchType = "Perfect Match";
-            if (!matchTemplateType.equalsIgnoreCase(templateType)){
-                matchType = "Imperfect Match";
+            List<NSubject> baselineSubjects = baselinePrints.parallelStream()
+                    .filter(fingerPrint -> readableRecord(fingerPrint.getTemplate()) != null)
+                    .map(fingerPrint -> {
+                        NSubject subject = new NSubject();
+                        subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(readableRecord(fingerPrint.getTemplate()))));
+                        subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
+                        subject.setProperty("templateType", fingerPrint.getTemplateType());
+                        subject.setProperty("personUuid", fingerPrint.getPersonUuid());
+                        subject.setProperty("id", fingerPrint.getId());
+                        subject.setProperty("recapture", fingerPrint.getRecapture());
+                        return subject;
+                    })
+                    .collect(Collectors.toList());
+
+            NBiometricTask task = biometricClient.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
+            baselineSubjects
+                    .forEach(subject -> {
+                        try {
+                            task.getSubjects().add(subject);
+                        } catch (Exception e) {
+                            task.getSubjects().remove(subject);
+                        }
+                    });
+
+            try {
+                biometricClient.performTask(task);
+            } catch (Exception e){
+                LOG.error("Enrolling the baseline gallery failed: {}", e.getMessage(), e);
             }
-            map.put("matchType", matchType);
-            return map;
-        }else {
-            return null;
+
+            NBiometricStatus status = biometricClient.identify(nSubject);
+
+            if (!status.equals(NBiometricStatus.OK)) {
+                deduplication.setUnmatchedCount(deduplication.getUnmatchedCount() + 1);
+                return null;
+            }
+
+            NMatchingResult best = nSubject.getMatchingResults().get(0);
+            String baselineId = best.getId().split("#")[0];
+            String baselineTemplateType = baselinePrints
+                    .stream()
+                    .filter(f -> StringUtils.equals(f.getId(), baselineId))
+                    .map(Biometric::getTemplateType)
+                    .findFirst().orElse(null);
+            deduplication.setMatchedCount(deduplication.getMatchedCount() + 1);
+
+            assert baselineTemplateType != null;
+            String key = "BASELINE_" + baselineTemplateType.toUpperCase().replaceAll(" ", "_");
+            String value = "RECAPTURE_" + recapturedTemplateType.toUpperCase().replaceAll(" ", "_");
+            details.put(key, value);
+            deduplication.setDetails(details);
+
+            boolean samePosition = StringUtils.equals(baselineTemplateType, recapturedTemplateType);
+            if (samePosition) {
+                deduplication.setPerfectMatchCount(deduplication.getPerfectMatchCount() + 1);
+            } else {
+                deduplication.setImperfectMatchCount(deduplication.getImperfectMatchCount() + 1);
+            }
+
+            Map<String, Object> matchData = new HashMap<>();
+            matchData.put("matchBiometricId", baselineId);
+            matchData.put("matchPersonUuid", best.getProperty("personUuid").toString());
+            matchData.put("matchType", best.getProperty("templateType").toString()
+                    .equalsIgnoreCase(recapturedTemplateType) ? "Perfect Match" : "Imperfect Match");
+            return matchData;
+        } finally {
+            biometricClient.dispose();
         }
     }
 
@@ -443,85 +466,6 @@ public class BiometricController {
         }
 
         return clientIdentificationDTO;
-    }
-
-
-    @SneakyThrows
-    private Deduplication deduplicationForRecapturedPrints(
-            NSubject nSubject, Long patientId, String recapturedTemplateType,
-            Deduplication deduplication
-    ) {
-        NBiometricClient biometricClient = null;
-        biometricClient = new NBiometricClient();
-        biometricClient.setMatchingThreshold(96);
-        biometricClient.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-        // biometricClient.setFingersReturnBinarizedImage(true);
-        biometricClient.setFingersQualityThreshold((byte) 75);
-
-        ObjectMapper mapper = new ObjectMapper();
-        ObjectNode parentNode = mapper.createObjectNode();
-
-        List<Biometric> baselinePrints = biometricRepository.getPatientBaselineFingerprints(patientId);
-
-        List<NSubject> baselineSubjects = baselinePrints.parallelStream()
-                .filter(fingerPrint -> readableRecord(fingerPrint.getTemplate()) != null)
-                .map(fingerPrint -> {
-                    NSubject subject = new NSubject();
-                    subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(readableRecord(fingerPrint.getTemplate()))));
-                    subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
-                    return subject;
-                })
-                .collect(Collectors.toList());
-
-
-        NBiometricTask task = biometricClient.createTask(EnumSet.of(NBiometricOperation.ENROLL), null);
-        baselineSubjects
-                .forEach(subject -> {
-                    try {
-                        task.getSubjects().add(subject);
-                    } catch (Exception e) {
-                        task.getSubjects().remove(subject);
-                    }
-                });
-
-        try {
-            biometricClient.performTask(task);
-        } catch (Exception e){
-            e.printStackTrace();
-        }
-
-        NBiometricStatus status = biometricClient.identify(nSubject);
-//        deduplication.setUnMatchCount(0);
-//        deduplication.setMatchCount(0);
-
-        if(status.equals(NBiometricStatus.OK)) {
-            String [] baselineSubjectId = nSubject.getMatchingResults().get(0).getId().split("#");
-            String baselineId = baselineSubjectId[0];
-            String baselineTemplateType = baselinePrints
-                    .stream()
-                    .filter(f -> StringUtils.equals(f.getId(), baselineId))
-                    .map(Biometric::getTemplateType)
-                    .findFirst().orElse(null);
-            deduplication.setMatchedCount(deduplication.getMatchedCount() + 1);
-
-            assert baselineTemplateType != null;
-            String key = "BASELINE_" + baselineTemplateType.toUpperCase().replaceAll(" ", "_");
-            String value = "RECAPTURE_" + recapturedTemplateType.toUpperCase().replaceAll(" ", "_");
-            details.put(key, value);
-            deduplication.setDetails(details);
-
-            if (StringUtils.equals(baselineTemplateType, recapturedTemplateType)){
-                deduplication.setPerfectMatchCount(deduplication.getPerfectMatchCount() + 1);
-            } else {
-                deduplication.setImperfectMatchCount(deduplication.getImperfectMatchCount() + 1);
-            }
-
-        }else {
-            deduplication.setUnmatchedCount(deduplication.getUnmatchedCount() + 1);
-        }
-        biometricClient.clear();
-
-        return deduplication;
     }
 
 
