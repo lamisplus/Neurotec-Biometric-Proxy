@@ -180,10 +180,18 @@ public class PatientRecall {
             return null;
         }
 
-        LOG.info("Recall identified person {} from print {} (facility {}, {}), search score {}",
-                personUuid, candidate.printId, facilityOf(candidate.printId),
+        if (found.size() > 1) {
+            LOG.warn("patient_person holds {} rows for person {}; the UI is sent the first, id {}",
+                    found.size(), personUuid, found.get(0).getId());
+        }
+
+        IdentifiedClient client = found.get(0);
+        LOG.info("Recall identified {} {}, patient id {} (person {}) from print {} "
+                        + "(facility {}, {}), search score {}",
+                client.getFirstName(), client.getSurname(), client.getId(), personUuid,
+                candidate.printId, facilityOf(candidate.printId),
                 print.getTemplateType(), candidate.score);
-        return identified(found.get(0), personUuid);
+        return identified(client, personUuid);
     }
 
     private String facilityOf(String printId) {
