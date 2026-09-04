@@ -327,6 +327,13 @@ public class BiometricController {
             result.setDeduplication(captureRequestDTO.getDeduplication());
             result.setType(CaptureResponse.Type.ERROR);
             return result;
+        } catch (Exception e) {
+            LOG.error("Error while capturing a fingerprint", e);
+            String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            result.getMessage().put("ERROR", "The scanner reported: " + reason);
+            result.setDeduplication(captureRequestDTO.getDeduplication());
+            result.setType(CaptureResponse.Type.ERROR);
+            return result;
         }
         client.clear();
 
@@ -435,37 +442,52 @@ public class BiometricController {
         }
 
         NBiometricStatus s = identifcationClient.identify(subject);
-        if (s.equals(NBiometricStatus.OK)) {
-
-            String [] id = subject.getMatchingResults().get(0).getId().split("#");
-
-            String matchedId = id[1];
-
-            String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
-                    "from patient_person where uuid = ?";
-
-            clientIdentificationDTO.setMessageType("SUCCESS_MATCH_FOUND");
-            clientIdentificationDTO.setMessage("Client identified");
-            clientIdentificationDTO.setPersonUuid(matchedId);
-
-            IdentifiedClient identifiedClient = (IdentifiedClient) jdbcTemplate
-                    .queryForObject(sql, new Object[] { matchedId }, new BeanPropertyRowMapper(IdentifiedClient.class));
-
-            assert identifiedClient != null;
-            clientIdentificationDTO.setId(identifiedClient.getId());
-            clientIdentificationDTO.setPersonUuid(matchedId);
-            clientIdentificationDTO.setSex(identifiedClient.getSex());
-            clientIdentificationDTO.setSurname(identifiedClient.getSurname());
-            clientIdentificationDTO.setFirstName(identifiedClient.getFirstName());
-            clientIdentificationDTO.setOtherName(identifiedClient.getOtherName());
-            clientIdentificationDTO.setHospitalNumber(identifiedClient.getHospitalNumber());
-
-
-        }else {
-            clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
-            clientIdentificationDTO.setMessage("Could not identify clients");
+        if (!s.equals(NBiometricStatus.OK)) {
+            return noMatchIdentification();
         }
 
+        String matchedId = matchedPersonUuid(subject);
+        if (matchedId == null) {
+            return noMatchIdentification();
+        }
+
+        String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
+                "from patient_person where uuid = ?";
+        List<IdentifiedClient> found = jdbcTemplate.query(sql, new Object[] { matchedId },
+                new BeanPropertyRowMapper<>(IdentifiedClient.class));
+
+        if (found.isEmpty()) {
+            LOG.warn("Fingerprint matched person {} but no patient record was found", matchedId);
+            return noMatchIdentification();
+        }
+
+        IdentifiedClient identifiedClient = found.get(0);
+        clientIdentificationDTO.setMessageType("SUCCESS_MATCH_FOUND");
+        clientIdentificationDTO.setMessage("Client identified");
+        clientIdentificationDTO.setId(identifiedClient.getId());
+        clientIdentificationDTO.setPersonUuid(matchedId);
+        clientIdentificationDTO.setSex(identifiedClient.getSex());
+        clientIdentificationDTO.setSurname(identifiedClient.getSurname());
+        clientIdentificationDTO.setFirstName(identifiedClient.getFirstName());
+        clientIdentificationDTO.setOtherName(identifiedClient.getOtherName());
+        clientIdentificationDTO.setHospitalNumber(identifiedClient.getHospitalNumber());
+        return clientIdentificationDTO;
+    }
+
+    private static String matchedPersonUuid(NSubject subject) {
+        NSubject.MatchingResultCollection results = subject.getMatchingResults();
+        if (results.isEmpty()) {
+            return null;
+        }
+        // Gallery ids are biometricId#personUuid.
+        String[] id = results.get(0).getId().split("#");
+        return id.length < 2 || id[1].trim().isEmpty() ? null : id[1];
+    }
+
+    private static ClientIdentificationDTO noMatchIdentification() {
+        ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
+        clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
+        clientIdentificationDTO.setMessage("Could not identify clients");
         return clientIdentificationDTO;
     }
 
