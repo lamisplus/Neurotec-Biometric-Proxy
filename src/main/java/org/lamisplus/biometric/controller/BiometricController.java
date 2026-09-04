@@ -51,7 +51,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class BiometricController {
     private NBiometricClient client;
-    // private NBiometricClient clientForDeduplication;
     private final Set<CapturedBiometricDto> capturedBiometricDtos = new HashSet<>();
     private final String BIOMETRICS_URL_VERSION_ONE = "/api/v1/biometrics";
     private final String NEUROTEC_URL_VERSION_ONE = "/api/v1/biometrics/neurotec";
@@ -73,7 +72,6 @@ public class BiometricController {
 
     @GetMapping(BIOMETRICS_URL_VERSION_ONE + "/reader")
     public List<Device> getReaders() {
-        //GET - http://localhost:8282/api/v1/biometrics//reader
         List<Device> devices = new ArrayList<>();
         fingerScannerManager.getDevices().forEach(device -> {
             Device d = new Device();
@@ -89,28 +87,23 @@ public class BiometricController {
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/diagnostics")
     public ResponseEntity<Map<String, Object>> diagnostics(
             @RequestParam(required = false, defaultValue = "false") boolean deep) {
-        //GET - http://localhost:8282/api/v1/biometrics/neurotec/diagnostics[?deep=true]
         return ResponseEntity.ok(fingerScannerManager.diagnostics(deep));
     }
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/gallery")
     public ResponseEntity<Map<String, Object>> gallery(@RequestParam(required = false) String personUuid) {
-        //GET - http://localhost:8282/api/v1/biometrics/neurotec/gallery?personUuid=...
         return ResponseEntity.ok(identificationGallery.status(personUuid));
     }
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/boot")
     public ErrorCodeDTO boot(@RequestParam String reader) {
-        //GET - http://localhost:8282/api/v1/biometrics/neurotec/boot?reader=Futronic FS80H %231
-        // Binds as well as reports: the frontend calls this before capturing, so the device
-        // opens here rather than on the first finger presented.
+        // Binds too, so the device opens here rather than on the first finger presented.
         fingerScannerManager.bindScanner(client, reader);
         return fingerScannerManager.bootStatus(reader);
     }
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/server")
     public ResponseEntity<String> getServerUrl() {
-        //GET - http://localhost:8282/api/v1/biometrics/server
         String activeUrl = "http://localhost:"+ activePort;
 
         return ResponseEntity.ok(activeUrl);
@@ -119,8 +112,7 @@ public class BiometricController {
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/angular/test")
     public ResponseEntity<Map<String, Object>> angularTest(@RequestParam String reader){
 
-        // Shares the capture client deliberately: a second one would hold the same physical
-        // scanner open alongside it, and the two take turns losing the device.
+        // Shares the capture client: two clients on one scanner take turns losing the device.
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("message", "Hello, world!");
         responseData.put("status", HttpStatus.OK.value());
@@ -143,7 +135,6 @@ public class BiometricController {
             if (status.equals(NBiometricStatus.OK)) {
                 status = client.createTemplate(subject);
                 if (status.equals(NBiometricStatus.OK)) {
-                    // Converting template to ISO format
                     byte[] isoTemplate = subject.getTemplateBuffer(CBEFFBiometricOrganizations.ISO_IEC_JTC_1_SC_37_BIOMETRICS,
                             CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
                             FMRecord.VERSION_ISO_20).toByteArray();
@@ -168,7 +159,6 @@ public class BiometricController {
                 LOG.info("Could not capture template");
             }
         }
-        // Return ResponseEntity with the map and HTTP status OK
         return new ResponseEntity<>(responseData, HttpStatus.OK);
     }
 
@@ -179,7 +169,6 @@ public class BiometricController {
     ){
         LOG.info("Fingers to deduplicate {}", capturedBiometricDto.size());
         return runDeduplication(capturedBiometricDto, patientId);
-        // return "Done with deduplication";
     }
 
 
@@ -195,10 +184,8 @@ public class BiometricController {
         LOG.info("Captured Size ****, {}", captureRequestDTO.getCapturedBiometricsList().size());
         Set<CapturedBiometricDto> capturedBiometricDtosIn =
                 captureRequestDTO.getCapturedBiometricsList();
-        //initializing response
         CaptureResponse result = getBiometricEnrollmentDto(captureRequestDTO);
 
-        //checking if new
         if(Boolean.TRUE.equals(isNew)){
             this.emptyStoreByPersonId(captureRequestDTO.getPatientId());
         }
@@ -223,16 +210,13 @@ public class BiometricController {
                 status = client.createTemplate(subject);
 
                 if (status.equals(NBiometricStatus.OK)) {
-                    // subject.getTemplateBuffer().toByteArray();
                     result.setDeviceName(reader);
 
-                    // Converting template to ISO format
                     byte[] isoTemplate = subject.getTemplateBuffer(CBEFFBiometricOrganizations.ISO_IEC_JTC_1_SC_37_BIOMETRICS,
                             CBEFFBDBFormatIdentifiers.ISO_IEC_JTC_1_SC_37_BIOMETRICS_FINGER_MINUTIAE_RECORD_FORMAT,
                             FMRecord.VERSION_ISO_20).toByteArray();
 
                     result.setTemplate(isoTemplate);
-                    //check for quality
                     long imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
                     result.setMainImageQuality(imageQuality);
 
@@ -267,7 +251,6 @@ public class BiometricController {
                     CompletableFuture<String> hashed =
                             CompletableFuture.supplyAsync(() -> bcryptHash(isoTemplate));
 
-                    //Checking if fingerprint is already captured in the current capturing process
                     status = deduplicateIfFingerIsAlreadyCapturedInTheCurrentProcess(
                             subject, captureRequestDTO
                     );
@@ -278,7 +261,6 @@ public class BiometricController {
                         client.clear();
                         return result;
                     }
-                    //Running deduplication against baseline fingerprints
                     LOG.info("Recapture choice ******* {}", recapture);
                     Map<String, Object> matchData = new HashMap<>();
                     if(recapture){
@@ -304,8 +286,6 @@ public class BiometricController {
 
                     result.setIso(true);
                     result.setCapturedBiometricsList(capturedBiometricDtosIn);
-                    // imageQuality = subject.getFingers().get(0).getObjects().get(0).getQuality();
-                    // NImage image = subject.getFingers().get(0).getImage();
 
                     String base64Image = Base64.getEncoder().encodeToString(isoTemplate);
                     result.setImage(isoTemplate);
@@ -341,10 +321,9 @@ public class BiometricController {
     }
 
     /**
-     * Matches the captured print against the patient's own baseline prints. Mutates
-     * {@code deduplication} with the recapture counters as a side effect.
+     * Mutates {@code deduplication} with the recapture counters as a side effect.
      *
-     * @return the verification match data, or null when the print matches no baseline print.
+     * @return the verification match data, or null when no baseline print matches.
      */
     @SneakyThrows
     private Map<String, Object> matchAgainstBaseline(
@@ -619,10 +598,7 @@ public class BiometricController {
                                 matchedPair.setEnrolledPatientFingerType(enrolledPatientTemplateType);
                                 matchedPair.setScore(score);
                                 matchedPairList.add(matchedPair);
-                                // Building Match pair data
                             }
-                            // Saving Matched Pair data
-                            /// saveMatchPair(matchedPairList);
 
                             numberOfMatch.updateAndGet(v -> v + 1);
                         }
@@ -727,10 +703,7 @@ public class BiometricController {
         }
     }
 
-    /**
-     * Binds the client to the requested reader. Returns true when no such scanner is attached,
-     * in which case the caller must not attempt a capture.
-     */
+    /** @return true when no such scanner is attached, in which case the caller must not capture. */
     private boolean scannerIsNotSet(String reader) {
         LOG.debug("Reader from REST **** {}", reader);
         return !fingerScannerManager.bindScanner(client, reader);
@@ -741,21 +714,18 @@ public class BiometricController {
         client.setMatchingThreshold(96);
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         client.setFingersTemplateSize(NTemplateSize.LARGE);
-        // Explicitly off: nothing reads them, and each is extra work on every capture.
+        // Nothing reads these, and each is extra work on every capture.
         client.setFingersCalculateNFIQ(false);
         client.setFingersDeterminePatternClass(false);
         client.setFingersReturnBinarizedImage(false);
         client.setFingersReturnRidgeSkeletonImage(false);
-        // The controller runs its own duplicate check; the SDK's repeats it inside the capture
-        // loop and reports a duplicate by asking for the finger again.
+        // The SDK check repeats ours inside the capture loop, asking for the finger again.
         client.setFingersCheckForDuplicatesWhenCapturing(false);
         client.initialize();
     }
 
     @PostConstruct
     public void init() {
-        // Native library path, licences and the device manager are set up by
-        // FingerScannerManager, which Spring constructs before this bean.
         createClient();
     }
 
@@ -777,12 +747,7 @@ public class BiometricController {
         return biometricEnrollmentDto;
     }
 
-    /**
-     * Byte 25 of an ISO 19794-2 record is the first finger view's (viewNumber &lt;&lt; 4) |
-     * impressionType. Most stored templates carry a viewNumber the SDK rejects; without this
-     * zeroing, gallery enrolment dropped from 186,809 to 43,882 of 205,604 records. Works on a
-     * copy so the entity's array, loaded from the database, is left untouched.
-     */
+    /** Byte 25 holds viewNumber|impressionType; most stored templates carry one the SDK rejects. */
     private static byte[] readableRecord(byte[] stored) {
         byte[] record = StoredTemplate.toFmr(stored);
         return record != null && record.length > 25 ? record : null;

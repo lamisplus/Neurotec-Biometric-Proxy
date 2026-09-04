@@ -54,11 +54,7 @@ public class IdentificationGallery {
     /** The database state the gallery was last built from; compared for equality only. */
     private String galleryFingerprint;
 
-    /**
-     * Builds the gallery off the request thread once the application is serving, so the first
-     * recall of the day does not wait minutes for it. A recall arriving mid-build blocks on
-     * {@link #upToDateClient()} until it finishes rather than starting a second one.
-     */
+    /** Builds off the request thread so the first recall of the day does not wait for it. */
     @EventListener(ApplicationReadyEvent.class)
     public void warmUp() {
         Thread warmUp = new Thread(() -> {
@@ -77,10 +73,7 @@ public class IdentificationGallery {
         warmUp.start();
     }
 
-    /**
-     * Returns null rather than queueing behind a build in progress. A recall that waits minutes
-     * for the start-up warm-up is indistinguishable from a hung request at the UI.
-     */
+    /** Returns null rather than queueing behind a build, which the UI cannot tell from a hang. */
     public NBiometricClient upToDateClientOrNull() {
         try {
             if (!lock.tryLock(WAIT_FOR_GALLERY_SECONDS, TimeUnit.SECONDS)) {
@@ -104,8 +97,7 @@ public class IdentificationGallery {
             return client;
         }
 
-        // A Set, not the List the query returns: containsAll against a List is a linear scan
-        // per element, which on a full gallery costs minutes on every recall.
+        // A Set, not the List: containsAll against a List is a linear scan per element.
         Set<String> currentIds = new HashSet<>(biometricRepository.getIdentificationGalleryIds());
 
         if (client == null || !currentIds.containsAll(enrolled)) {
@@ -119,17 +111,12 @@ public class IdentificationGallery {
         if (!missing.isEmpty()) {
             enrol(missing);
         }
-        // The value read before the build, not after: a print written mid-build then leaves the
-        // two out of step and is topped up on the next recall, rather than being missed for good.
+        // Read before the build, not after, so a print written mid-build is topped up next recall.
         galleryFingerprint = fingerprint;
         return client;
     }
 
-    /**
-     * Reports whether a person's stored prints actually made it into the gallery, which
-     * separates "the print is not visible to this database" from "it is enrolled but did
-     * not match".
-     */
+    /** Separates "the print is not in this database" from "it is enrolled but did not match". */
     public Map<String, Object> status(String personUuid) {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("galleryBuilt", client != null);
@@ -244,8 +231,7 @@ public class IdentificationGallery {
             return 0;
         }
 
-        // One line per batch is noise; the per-batch reason repeats and the run is summarised
-        // by the rejected count in enrol().
+        // Per-batch reasons repeat; enrol() summarises the run by rejected count.
         if (!NBiometricStatus.OK.equals(task.getStatus())) {
             LOG.debug("Gallery batch task status {}{}", task.getStatus(),
                     task.getError() == null ? "" : " - " + task.getError().getMessage());

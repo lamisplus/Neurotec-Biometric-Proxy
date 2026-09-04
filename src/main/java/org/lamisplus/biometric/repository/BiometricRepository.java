@@ -73,24 +73,17 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     List<Biometric> getAllBaselineFingerPrintsByFacility();
 
-    /**
-     * Every print eligible for identification. Deliberately not limited to recapture = 0: the
-     * module numbers each fresh capture max(recapture)+1, so restricting to baselines hides
-     * every print taken after a patient's first, which SecuGen identification does not do.
-     */
+    /** Not limited to recapture = 0: that would hide every print after a patient's first. */
     @Query(value = "select id from biometric where archived = 0 " +
             "and version_iso_20 = true and template is not null",
             nativeQuery = true)
     List<String> getIdentificationGalleryIds();
 
     /**
-     * Change probe for the identification gallery, so a recall need not pull every id back. Count
-     * alone would miss an insert and a delete that cancel out between two checks, hence the stamp.
-     * Opaque - compare for equality only.
+     * Opaque change probe; count alone misses an insert and delete that cancel out.
      *
-     * <p>Indexable as: {@code create index concurrently biometric_gallery_idx on biometric
-     * (last_modified_date) where archived = 0 and version_iso_20 = true and template is not
-     * null}.</p>
+     * <p>Index: {@code (last_modified_date) where archived = 0 and version_iso_20
+     * and template is not null}.</p>
      */
     @Query(value = "select count(*) || '@' || coalesce(max(last_modified_date)::text, '-') " +
             "from biometric where archived = 0 " +

@@ -5,10 +5,7 @@ import java.io.DataInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-/**
- * Recovers the ISO 19794-2 record from a stored template. Historic capture paths wrote the
- * same bytes three different ways, and the SDK only accepts one of them.
- */
+/** Historic capture paths wrote the same bytes three ways; the SDK accepts only one. */
 public final class StoredTemplate {
 
     private static final byte[] FMR_MAGIC = {0x46, 0x4d, 0x52, 0x00};
@@ -55,10 +52,7 @@ public final class StoredTemplate {
         }
     }
 
-    /**
-     * Reads the payload of a serialised String directly rather than through ObjectInputStream,
-     * which would deserialise whatever object graph the bytes described.
-     */
+    /** Reads the payload directly; ObjectInputStream would deserialise any object graph. */
     private static byte[] fromSerialisedString(byte[] stored) {
         if (stored.length <= SERIALISED_STRING_PREFIX.length) {
             return null;

@@ -39,11 +39,7 @@ public class FingerScannerManager {
 
     private NDeviceManager deviceManager;
 
-    /**
-     * Resolving enumerates the device manager and reads native properties off every device, and
-     * capture does it on every request. An unplugged scanner stops reporting itself as available,
-     * which is what evicts the entry.
-     */
+    /** Resolving enumerates every device natively; an unplugged scanner evicts its own entry. */
     private final Map<String, NFScanner> resolvedScanners = new ConcurrentHashMap<>();
 
     @PostConstruct
@@ -172,9 +168,7 @@ public class FingerScannerManager {
     }
 
     /**
-     * Re-assigning the scanner closes and reopens the device and restarts its finger detection,
-     * so a finger already resting on the platen has to be lifted and placed again before the SDK
-     * sees it. Hence only on a genuine change.
+     * Re-assigning reopens the device and restarts finger detection, so only on a real change.
      *
      * @return false when no such scanner is attached, in which case the caller must not capture.
      */
@@ -251,10 +245,7 @@ public class FingerScannerManager {
                 .build();
     }
 
-    /**
-     * @param deep also enumerate every device type. That builds a second auto-plugging device
-     *             manager, which claims the scanner away from the capture client.
-     */
+    /** @param deep enumerate every device type; that claims the scanner from the capture client. */
     public Map<String, Object> diagnostics(boolean deep) {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("workingDirectory", Utils.getWorkingDirectory());
