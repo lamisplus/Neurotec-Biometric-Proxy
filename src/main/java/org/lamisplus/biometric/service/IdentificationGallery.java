@@ -209,9 +209,16 @@ public class IdentificationGallery {
                 unreadable++;
                 continue;
             }
+            // A print with no owner can still match, and would then identify nobody.
+            if (fingerPrint.getPersonUuid() == null || fingerPrint.getPersonUuid().trim().isEmpty()) {
+                unreadable++;
+                continue;
+            }
             NSubject subject = new NSubject();
             subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(record)));
             subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
+            subject.setProperty("personUuid", fingerPrint.getPersonUuid());
+            subject.setProperty("biometricId", fingerPrint.getId());
             subjects.add(subject);
         }
 

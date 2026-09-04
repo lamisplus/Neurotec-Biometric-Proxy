@@ -458,9 +458,18 @@ public class BiometricController {
         if (results.isEmpty()) {
             return null;
         }
-        // Gallery ids are biometricId#personUuid.
-        String[] id = results.get(0).getId().split("#");
-        return id.length < 2 || id[1].trim().isEmpty() ? null : id[1];
+        NMatchingResult best = results.get(0);
+        LOG.info("Recall matched gallery entry {} with score {} ({} candidate(s) over threshold)",
+                best.getId(), best.getScore(), results.size());
+
+        Object personUuid = best.getProperty("personUuid");
+        if (personUuid != null && !personUuid.toString().trim().isEmpty()) {
+            return personUuid.toString();
+        }
+        // Older gallery entries carry it only in the id, as biometricId#personUuid.
+        String id = best.getId();
+        int separator = id.lastIndexOf('#');
+        return separator < 0 || separator == id.length() - 1 ? null : id.substring(separator + 1);
     }
 
     private static ClientIdentificationDTO noMatchIdentification() {
