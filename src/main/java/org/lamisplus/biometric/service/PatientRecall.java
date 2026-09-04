@@ -18,7 +18,6 @@ import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,20 +46,37 @@ public class PatientRecall {
     private final JdbcTemplate jdbcTemplate;
     private final NeurotecProperties neurotecProperties;
 
-    private NBiometricClient verifier;
+    private volatile NBiometricClient verifier;
 
-    @PostConstruct
-    void createVerifier() {
-        verifier = new NBiometricClient();
-        verifier.setMatchingThreshold(neurotecProperties.getVerificationThreshold());
-        verifier.setFingersMatchingSpeed(NMatchingSpeed.LOW);
-        verifier.initialize();
+    /**
+     * Built on first use, not at startup: the native library path is set by FingerScannerManager,
+     * and touching any Neurotec type before that fails to load NCore.
+     */
+    private NBiometricClient verifier() {
+        NBiometricClient current = verifier;
+        if (current == null) {
+            synchronized (this) {
+                current = verifier;
+                if (current == null) {
+                    current = new NBiometricClient();
+                    current.setMatchingThreshold(neurotecProperties.getVerificationThreshold());
+                    current.setFingersMatchingSpeed(NMatchingSpeed.LOW);
+                    current.initialize();
+                    verifier = current;
+                }
+            }
+        }
+        return current;
     }
 
     @PreDestroy
     void disposeVerifier() {
+        NBiometricClient current = verifier;
+        if (current == null) {
+            return;
+        }
         try {
-            verifier.dispose();
+            current.dispose();
         } catch (Exception e) {
             LOG.warn("Could not dispose the recall verifier: {}", e.getMessage());
         }
@@ -182,7 +198,7 @@ public class PatientRecall {
     private boolean verified(byte[] probeTemplate, byte[] storedRecord) {
         try (NSubject probe = subjectOf(probeTemplate);
              NSubject stored = subjectOf(storedRecord)) {
-            return NBiometricStatus.OK.equals(verifier.verify(probe, stored));
+            return NBiometricStatus.OK.equals(verifier().verify(probe, stored));
         } catch (Exception e) {
             LOG.warn("Recall verification could not run: {}", e.getMessage());
             return false;
