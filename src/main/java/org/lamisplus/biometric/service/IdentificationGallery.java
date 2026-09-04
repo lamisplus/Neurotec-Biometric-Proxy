@@ -203,6 +203,7 @@ public class IdentificationGallery {
             }
         }
         client = new NBiometricClient();
+        LOG.info("Identification gallery database: {}", databaseUrl());
         LOG.info("Building the identification gallery for facility {} at matching threshold {}",
                 neurotecProperties.getFacilityId() == null
                         ? "ALL (unscoped)" : neurotecProperties.getFacilityId(),
