@@ -22,6 +22,7 @@ import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.service.FingerCapture;
 import org.lamisplus.biometric.service.FingerScannerManager;
 import org.lamisplus.biometric.service.IdentificationGallery;
+import org.lamisplus.biometric.service.PatientRecall;
 import org.lamisplus.biometric.util.StoredTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -59,6 +60,7 @@ public class BiometricController {
     private final FingerScannerManager fingerScannerManager;
     private final IdentificationGallery identificationGallery;
     private final FingerCapture fingerCapture;
+    private final PatientRecall patientRecall;
 
     private Deduplication rDeduplicationDTO;
     private final Map<String, String> details = new HashMap<>();
@@ -235,7 +237,7 @@ public class BiometricController {
                                 result.setType(CaptureResponse.Type.SUCCESS);
                                 return result;
                             case "LOCAL":
-                                ClientIdentificationDTO clientIdentificationDTO = clientIdentification(subject);
+                                ClientIdentificationDTO clientIdentificationDTO = patientRecall.identify(isoTemplate);
                                 result.setClientIdentificationDTO(clientIdentificationDTO);
                                 result.setType(CaptureResponse.Type.SUCCESS);
                                 return result;
@@ -406,85 +408,6 @@ public class BiometricController {
         } finally {
             biometricClient.dispose();
         }
-    }
-
-    @SneakyThrows
-    private ClientIdentificationDTO clientIdentification (NSubject subject) {
-
-        ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
-
-        NBiometricClient identifcationClient = identificationGallery.upToDateClientOrNull();
-        if (identifcationClient == null) {
-            clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
-            clientIdentificationDTO.setMessage("Fingerprint gallery is still loading, please try again shortly");
-            return clientIdentificationDTO;
-        }
-
-        NBiometricStatus s = identifcationClient.identify(subject);
-        if (!s.equals(NBiometricStatus.OK)) {
-            return noMatchIdentification();
-        }
-
-        String matchedPrintId = matchedPrintId(subject);
-        if (matchedPrintId == null) {
-            return noMatchIdentification();
-        }
-
-        // The database, not the gallery, says who a print belongs to. A gallery entry for a print
-        // that has since been deleted or archived would otherwise keep naming its old owner.
-        Optional<String> owner = biometricRepository.getLivePrintOwner(matchedPrintId);
-        if (!owner.isPresent()) {
-            LOG.warn("Recall matched print {}, which the database no longer holds. Rebuilding the "
-                    + "gallery and reporting no match.", matchedPrintId);
-            identificationGallery.invalidate();
-            return noMatchIdentification();
-        }
-        String matchedId = owner.get();
-
-        String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
-                "from patient_person where uuid = ?";
-        List<IdentifiedClient> found = jdbcTemplate.query(sql, new Object[] { matchedId },
-                new BeanPropertyRowMapper<>(IdentifiedClient.class));
-
-        if (found.isEmpty()) {
-            LOG.warn("Fingerprint matched person {} but no patient record was found", matchedId);
-            return noMatchIdentification();
-        }
-
-        IdentifiedClient identifiedClient = found.get(0);
-        clientIdentificationDTO.setMessageType("SUCCESS_MATCH_FOUND");
-        clientIdentificationDTO.setMessage("Client identified");
-        clientIdentificationDTO.setId(identifiedClient.getId());
-        clientIdentificationDTO.setPersonUuid(matchedId);
-        clientIdentificationDTO.setSex(identifiedClient.getSex());
-        clientIdentificationDTO.setSurname(identifiedClient.getSurname());
-        clientIdentificationDTO.setFirstName(identifiedClient.getFirstName());
-        clientIdentificationDTO.setOtherName(identifiedClient.getOtherName());
-        clientIdentificationDTO.setHospitalNumber(identifiedClient.getHospitalNumber());
-        return clientIdentificationDTO;
-    }
-
-    private static String matchedPrintId(NSubject subject) {
-        NSubject.MatchingResultCollection results = subject.getMatchingResults();
-        if (results.isEmpty()) {
-            return null;
-        }
-        NMatchingResult best = results.get(0);
-        LOG.info("Recall matched gallery entry {} with score {} ({} candidate(s) over threshold)",
-                best.getId(), best.getScore(), results.size());
-
-        // Gallery ids are biometricId#personUuid. getProperty throws when absent, and a matching
-        // result does not carry the properties set on the enrolled subject.
-        String id = best.getId();
-        int separator = id.indexOf('#');
-        return separator <= 0 ? null : id.substring(0, separator);
-    }
-
-    private static ClientIdentificationDTO noMatchIdentification() {
-        ClientIdentificationDTO clientIdentificationDTO = new ClientIdentificationDTO();
-        clientIdentificationDTO.setMessageType("SUCCESS_NO_MATCH_FOUND");
-        clientIdentificationDTO.setMessage("Could not identify clients");
-        return clientIdentificationDTO;
     }
 
 

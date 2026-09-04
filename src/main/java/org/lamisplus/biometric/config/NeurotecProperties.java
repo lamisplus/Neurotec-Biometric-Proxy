@@ -17,6 +17,12 @@ public class NeurotecProperties {
 
     private int identificationThreshold = 96;
 
+    /** Applied to the one to one check that confirms a candidate from the search. */
+    private int verificationThreshold = 96;
+
+    /** How many candidates the search offers for verification. Each is confirmed independently. */
+    private int candidateCount = 10;
+
     /** Zero leaves the SDK default. Raise only on evidence: it drops prints from the gallery. */
     private int minimalMinutiaCount = 0;
 

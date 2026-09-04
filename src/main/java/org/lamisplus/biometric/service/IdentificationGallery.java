@@ -198,6 +198,8 @@ public class IdentificationGallery {
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         // Parallelism only; it cannot change which entry matches.
         client.setMaximalThreadCount(Runtime.getRuntime().availableProcessors());
+        // A list, not one answer: recall verifies each candidate, so their order does not decide.
+        client.setMatchingMaximalResultCount(neurotecProperties.getCandidateCount());
         enrolled.clear();
         galleryFingerprint = null;
         lastCheckedAt = 0L;
