@@ -109,13 +109,13 @@ public class IdentificationGallery {
         }
         lastCheckedAt = now;
 
-        String fingerprint = biometricRepository.getIdentificationGalleryFingerprint();
+        String fingerprint = galleryFingerprintNow();
         if (client != null && fingerprint != null && fingerprint.equals(galleryFingerprint)) {
             return client;
         }
 
         // A Set, not the List: containsAll against a List is a linear scan per element.
-        Set<String> currentIds = new HashSet<>(biometricRepository.getIdentificationGalleryIds());
+        Set<String> currentIds = new HashSet<>(galleryIds());
 
         if (client == null || !currentIds.containsAll(enrolled)) {
             // Top-up cannot express a removal, so anything archived or deleted forces a rebuild.
@@ -133,18 +133,33 @@ public class IdentificationGallery {
         return client;
     }
 
+    private List<String> galleryIds() {
+        Long facilityId = neurotecProperties.getFacilityId();
+        return facilityId == null
+                ? biometricRepository.getIdentificationGalleryIds()
+                : biometricRepository.getIdentificationGalleryIds(facilityId);
+    }
+
+    private String galleryFingerprintNow() {
+        Long facilityId = neurotecProperties.getFacilityId();
+        return facilityId == null
+                ? biometricRepository.getIdentificationGalleryFingerprint()
+                : biometricRepository.getIdentificationGalleryFingerprint(facilityId);
+    }
+
     /** Separates "the print is not in this database" from "it is enrolled but did not match". */
     public Map<String, Object> status(String personUuid) {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("galleryBuilt", client != null);
         report.put("enrolledCount", enrolled.size());
         report.put("identificationThreshold", neurotecProperties.getIdentificationThreshold());
+        report.put("facilityId", neurotecProperties.getFacilityId());
         report.put("printsInDatabase", biometricRepository.countIdentificationGalleryPrints());
         report.put("galleryFingerprint", galleryFingerprint);
 
         // Entries the matcher still holds for prints the database no longer has: these match and
         // then name an owner whose prints are gone.
-        Set<String> live = new HashSet<>(biometricRepository.getIdentificationGalleryIds());
+        Set<String> live = new HashSet<>(galleryIds());
         List<String> stale = enrolled.stream().filter(id -> !live.contains(id)).collect(Collectors.toList());
         report.put("staleGalleryEntryCount", stale.size());
         report.put("staleGalleryEntries", stale.size() > 50 ? stale.subList(0, 50) : stale);
@@ -188,9 +203,10 @@ public class IdentificationGallery {
             }
         }
         client = new NBiometricClient();
-        LOG.info("Building the identification gallery at matching threshold {}, minimum {} minutiae",
-                neurotecProperties.getIdentificationThreshold(),
-                neurotecProperties.getMinimalMinutiaCount());
+        LOG.info("Building the identification gallery for facility {} at matching threshold {}",
+                neurotecProperties.getFacilityId() == null
+                        ? "ALL (unscoped)" : neurotecProperties.getFacilityId(),
+                neurotecProperties.getIdentificationThreshold());
         client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
         if (neurotecProperties.getMinimalMinutiaCount() > 0) {
             client.setFingersMinimalMinutiaCount(neurotecProperties.getMinimalMinutiaCount());

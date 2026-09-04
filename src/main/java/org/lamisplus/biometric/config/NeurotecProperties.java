@@ -20,6 +20,9 @@ public class NeurotecProperties {
     /** Applied to the one to one check that confirms a candidate from the search. */
     private int verificationThreshold = 96;
 
+    /** Restricts recall to one facility's prints, as SecuGen does. Null searches every facility. */
+    private Long facilityId;
+
     /** How many candidates the search offers for verification. Each is confirmed independently. */
     private int candidateCount = 10;
 

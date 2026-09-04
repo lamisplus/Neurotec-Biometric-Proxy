@@ -164,9 +164,18 @@ public class PatientRecall {
             return null;
         }
 
-        LOG.info("Recall identified person {} from print {}, search score {}",
-                personUuid, candidate.printId, candidate.score);
+        LOG.info("Recall identified person {} from print {} (facility {}, {}), search score {}",
+                personUuid, candidate.printId, facilityOf(candidate.printId),
+                print.getTemplateType(), candidate.score);
         return identified(found.get(0), personUuid);
+    }
+
+    private String facilityOf(String printId) {
+        try {
+            return biometricRepository.getPrintFacility(printId).map(String::valueOf).orElse("unknown");
+        } catch (Exception e) {
+            return "unavailable";
+        }
     }
 
     /** One to one against the stored bytes, so a wrong entry in the gallery cannot decide. */

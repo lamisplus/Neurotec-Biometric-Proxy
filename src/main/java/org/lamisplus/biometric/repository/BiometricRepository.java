@@ -92,6 +92,22 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     String getIdentificationGalleryFingerprint();
 
+    /** Facility scoped, as SecuGen's index is. Only used when a facility id is configured. */
+    @Query(value = "select id from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null and facility_id = ?1",
+            nativeQuery = true)
+    List<String> getIdentificationGalleryIds(Long facilityId);
+
+    @Query(value = "select count(*) || '@' || coalesce(cast(max(last_modified_date) as text), '-') " +
+            "from biometric where archived = 0 " +
+            "and version_iso_20 = true and template is not null and facility_id = ?1",
+            nativeQuery = true)
+    String getIdentificationGalleryFingerprint(Long facilityId);
+
+    /** Diagnostic only: which facility a matched print was enrolled at. */
+    @Query(value = "select facility_id from biometric where id = ?1", nativeQuery = true)
+    Optional<Number> getPrintFacility(String biometricId);
+
     /** Number, not long: a native count arrives from Hibernate as a BigInteger. */
     @Query(value = "select count(*) from biometric where archived = 0 " +
             "and version_iso_20 = true and template is not null",
