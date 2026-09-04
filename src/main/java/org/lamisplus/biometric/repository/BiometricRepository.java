@@ -92,6 +92,12 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
             nativeQuery = true)
     String getIdentificationGalleryFingerprint();
 
+    /** The owner of a print that is still live, so a stale gallery entry resolves to nothing. */
+    @Query(value = "select person_uuid from biometric where id = ?1 and archived = 0 " +
+            "and version_iso_20 = true and template is not null",
+            nativeQuery = true)
+    Optional<String> getLivePrintOwner(String biometricId);
+
     /** Number, not long: a native count arrives from Hibernate as a BigInteger. */
     @Query(value = "select count(*) from biometric where archived = 0 " +
             "and version_iso_20 = true and template is not null",

@@ -138,6 +138,13 @@ public class IdentificationGallery {
         report.put("printsInDatabase", biometricRepository.countIdentificationGalleryPrints());
         report.put("galleryFingerprint", galleryFingerprint);
 
+        // Entries the matcher still holds for prints the database no longer has: these match and
+        // then name an owner whose prints are gone.
+        Set<String> live = new HashSet<>(biometricRepository.getIdentificationGalleryIds());
+        List<String> stale = enrolled.stream().filter(id -> !live.contains(id)).collect(Collectors.toList());
+        report.put("staleGalleryEntryCount", stale.size());
+        report.put("staleGalleryEntries", stale.size() > 50 ? stale.subList(0, 50) : stale);
+
         report.put("database", databaseUrl());
 
         if (personUuid != null && !personUuid.trim().isEmpty()) {
@@ -158,6 +165,12 @@ public class IdentificationGallery {
         } catch (Exception e) {
             return "unknown: " + e.getMessage();
         }
+    }
+
+    /** Forces a rebuild when a match resolves to a print the database no longer has. */
+    public void invalidate() {
+        lastCheckedAt = 0L;
+        galleryFingerprint = null;
     }
 
     private void rebuild() {

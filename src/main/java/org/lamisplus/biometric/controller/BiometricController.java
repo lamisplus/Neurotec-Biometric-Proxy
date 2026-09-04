@@ -425,10 +425,21 @@ public class BiometricController {
             return noMatchIdentification();
         }
 
-        String matchedId = matchedPersonUuid(subject);
-        if (matchedId == null) {
+        String matchedPrintId = matchedPrintId(subject);
+        if (matchedPrintId == null) {
             return noMatchIdentification();
         }
+
+        // The database, not the gallery, says who a print belongs to. A gallery entry for a print
+        // that has since been deleted or archived would otherwise keep naming its old owner.
+        Optional<String> owner = biometricRepository.getLivePrintOwner(matchedPrintId);
+        if (!owner.isPresent()) {
+            LOG.warn("Recall matched print {}, which the database no longer holds. Rebuilding the "
+                    + "gallery and reporting no match.", matchedPrintId);
+            identificationGallery.invalidate();
+            return noMatchIdentification();
+        }
+        String matchedId = owner.get();
 
         String sql = "select id, uuid, first_name, sex, surname, other_name, hospital_number, date_of_birth \n" +
                 "from patient_person where uuid = ?";
@@ -453,7 +464,7 @@ public class BiometricController {
         return clientIdentificationDTO;
     }
 
-    private static String matchedPersonUuid(NSubject subject) {
+    private static String matchedPrintId(NSubject subject) {
         NSubject.MatchingResultCollection results = subject.getMatchingResults();
         if (results.isEmpty()) {
             return null;
@@ -462,14 +473,14 @@ public class BiometricController {
         LOG.info("Recall matched gallery entry {} with score {} ({} candidate(s) over threshold)",
                 best.getId(), best.getScore(), results.size());
 
-        Object personUuid = best.getProperty("personUuid");
-        if (personUuid != null && !personUuid.toString().trim().isEmpty()) {
-            return personUuid.toString();
+        Object biometricId = best.getProperty("biometricId");
+        if (biometricId != null && !biometricId.toString().trim().isEmpty()) {
+            return biometricId.toString();
         }
-        // Older gallery entries carry it only in the id, as biometricId#personUuid.
+        // Gallery ids are biometricId#personUuid; the id itself may contain a #.
         String id = best.getId();
         int separator = id.lastIndexOf('#');
-        return separator < 0 || separator == id.length() - 1 ? null : id.substring(separator + 1);
+        return separator <= 0 ? null : id.substring(0, separator);
     }
 
     private static ClientIdentificationDTO noMatchIdentification() {
