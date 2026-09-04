@@ -64,7 +64,7 @@ lamisplus:
       quality: 80
   neurotec:
     plugin-search-path: XXXXXXXX
-    identification-threshold: 96
+    identification-threshold: 144
     license-server: /local
     license-port: 5000
 server:

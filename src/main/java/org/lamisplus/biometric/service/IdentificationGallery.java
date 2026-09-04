@@ -44,7 +44,13 @@ public class IdentificationGallery {
 
     private static final int MAXIMAL_RESULT_COUNT = 10;
 
+    /**
+     * ISO 19794-2: 24 byte header, then finger position, view/impression, quality, minutia count.
+     */
+    private static final int MINUTIA_COUNT_OFFSET = 27;
+
     private int unreadable = 0;
+    private int tooFewMinutiae = 0;
     private int searchable = 0;
 
     private final BiometricRepository biometricRepository;
@@ -184,7 +190,11 @@ public class IdentificationGallery {
             }
         }
         client = new NBiometricClient();
+        LOG.info("Building the identification gallery at matching threshold {}, minimum {} minutiae",
+                neurotecProperties.getIdentificationThreshold(),
+                neurotecProperties.getMinimalMinutiaCount());
         client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
+        client.setFingersMinimalMinutiaCount(neurotecProperties.getMinimalMinutiaCount());
         // LOW is the accurate end of the scale; recall must not trade accuracy for speed.
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         client.setMaximalThreadCount(Runtime.getRuntime().availableProcessors());
@@ -199,6 +209,7 @@ public class IdentificationGallery {
     private void enrol(List<String> ids) {
         long start = System.currentTimeMillis();
         unreadable = 0;
+        tooFewMinutiae = 0;
         int loadedNow = 0;
         int nextProgressAt = PROGRESS_EVERY;
         for (int from = 0; from < ids.size(); from += BATCH_SIZE) {
@@ -215,8 +226,9 @@ public class IdentificationGallery {
         int notLoaded = ids.size() - loadedNow;
         if (notLoaded > 0) {
             LOG.warn("Gallery: {} of {} fingerprint(s) could not be loaded into the matcher and will never "
-                            + "match ({} in an unreadable template format). Enable DEBUG for the SDK reason.",
-                    notLoaded, ids.size(), unreadable);
+                            + "match ({} unreadable, {} with fewer than {} minutiae).",
+                    notLoaded, ids.size(), unreadable, tooFewMinutiae,
+                    neurotecProperties.getMinimalMinutiaCount());
         }
         searchable += loadedNow;
         LOG.info("Gallery: {} of {} fingerprint(s) loaded into the matcher in {}ms, {} searchable in total",
@@ -236,13 +248,18 @@ public class IdentificationGallery {
         List<NSubject> subjects = new ArrayList<>();
         for (Biometric fingerPrint : fingerprints) {
             byte[] record = StoredTemplate.toFmr(fingerPrint.getTemplate());
-            if (record == null || record.length <= 25) {
+            if (record == null || record.length <= MINUTIA_COUNT_OFFSET) {
                 unreadable++;
                 continue;
             }
             // A print with no owner can still match, and would then identify nobody.
             if (fingerPrint.getPersonUuid() == null || fingerPrint.getPersonUuid().trim().isEmpty()) {
                 unreadable++;
+                continue;
+            }
+            // Too few minutiae to identify anyone reliably, and a standing false-accept risk.
+            if ((record[MINUTIA_COUNT_OFFSET] & 0xFF) < neurotecProperties.getMinimalMinutiaCount()) {
+                tooFewMinutiae++;
                 continue;
             }
             NSubject subject = new NSubject();
