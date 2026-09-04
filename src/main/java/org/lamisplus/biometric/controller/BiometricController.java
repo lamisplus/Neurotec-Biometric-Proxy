@@ -513,7 +513,6 @@ public class BiometricController {
                 NSubject subject = new NSubject();
                 subject.setTemplateBuffer(new NBuffer(template.getTemplate()));
                 subject.setId(template.getId());
-                subject.setProperty("data", template);
                 currentSubjects.add(subject);
             }
 
@@ -526,7 +525,6 @@ public class BiometricController {
                         NSubject subject = new NSubject();
                         subject.setTemplateBuffer(new NBuffer(fingerPrint.getTemplate()));
                         subject.setId(fingerPrint.getId() + "#" +fingerPrint.getPersonUuid());
-                        subject.setProperty("data", fingerPrint);
                         return subject;
                     })
                     .collect(Collectors.toList());
@@ -550,6 +548,17 @@ public class BiometricController {
 
             AtomicReference<Integer> numberOfMatch = new AtomicReference<>(0);
 
+            // Keyed lookups: getProperty raises when the name is absent, and a matching result
+            // does not carry the properties set on the subject that was enrolled.
+            Map<String, Biometric> galleryById = new HashMap<>();
+            for (Biometric fingerPrint : biometricList) {
+                galleryById.put(fingerPrint.getId(), fingerPrint);
+            }
+            Map<String, CapturedBiometricDto> probeById = new HashMap<>();
+            for (CapturedBiometricDto template : printsToDeduplicate) {
+                probeById.put(template.getId(), template);
+            }
+
             NBiometricClient finalDeduplication = deduplication;
             DeduplicationDetails deduplicationDetails = new DeduplicationDetails();
             List<MatchedFinger> matchedFingerList = Collections.synchronizedList(new ArrayList<>());
@@ -558,10 +567,13 @@ public class BiometricController {
                         NBiometricStatus s = finalDeduplication.identify(subject);
                         if(s.equals(NBiometricStatus.OK)){
 
-                            Biometric subjectBiometric = subject.getProperty("data", Biometric.class);
+                            CapturedBiometricDto probe = probeById.get(subject.getId());
+                            if (probe == null) {
+                                return;
+                            }
                             MatchedFinger matchedFinger = new MatchedFinger();
-                            matchedFinger.setFingerType(subjectBiometric.getTemplateType());
-                            matchedFinger.setId(subjectBiometric.getId());
+                            matchedFinger.setFingerType(probe.getTemplateType());
+                            matchedFinger.setId(probe.getId());
 
                             NSubject.MatchingResultCollection nMatchingResults = subject.getMatchingResults();
                             List<PersonMatched> personMatchedList = new ArrayList<>();
@@ -569,7 +581,11 @@ public class BiometricController {
                             List<MatchedPair> matchedPairList = new ArrayList<>();
 
                             for (int j = 0; j < nMatchingResults.size(); j++) {
-                                Biometric matched = subject.getMatchingResults().get(j).getProperty("data", Biometric.class);
+                                Biometric matched = galleryById.get(
+                                        nMatchingResults.get(j).getId().split("#")[0]);
+                                if (matched == null) {
+                                    continue;
+                                }
 
                                 PersonMatched personMatched = new PersonMatched();
                                 personMatched.setPatientId("");
