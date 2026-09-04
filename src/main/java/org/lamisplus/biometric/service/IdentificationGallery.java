@@ -39,10 +39,8 @@ public class IdentificationGallery {
     private static final int PROGRESS_EVERY = 10000;
 
     private static final int WAIT_FOR_GALLERY_SECONDS = 5;
-
     private static final long CHECK_INTERVAL_MILLIS = 2000L;
 
-    private static final int MAXIMAL_RESULT_COUNT = 10;
 
     /**
      * ISO 19794-2: 24 byte header, then finger position, view/impression, quality, minutia count.
@@ -197,11 +195,9 @@ public class IdentificationGallery {
         if (neurotecProperties.getMinimalMinutiaCount() > 0) {
             client.setFingersMinimalMinutiaCount(neurotecProperties.getMinimalMinutiaCount());
         }
-        // LOW is the accurate end of the scale; recall must not trade accuracy for speed.
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
+        // Parallelism only; it cannot change which entry matches.
         client.setMaximalThreadCount(Runtime.getRuntime().availableProcessors());
-        // Recall reads the best result; the rest are collected only to be logged.
-        client.setMatchingMaximalResultCount(MAXIMAL_RESULT_COUNT);
         enrolled.clear();
         galleryFingerprint = null;
         lastCheckedAt = 0L;
