@@ -344,10 +344,6 @@ public class BiometricController {
                         NSubject subject = new NSubject();
                         subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(readableRecord(fingerPrint.getTemplate()))));
                         subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
-                        subject.setProperty("templateType", fingerPrint.getTemplateType());
-                        subject.setProperty("personUuid", fingerPrint.getPersonUuid());
-                        subject.setProperty("id", fingerPrint.getId());
-                        subject.setProperty("recapture", fingerPrint.getRecapture());
                         return subject;
                     })
                     .collect(Collectors.toList());
@@ -376,15 +372,20 @@ public class BiometricController {
             }
 
             NMatchingResult best = nSubject.getMatchingResults().get(0);
-            String baselineId = best.getId().split("#")[0];
-            String baselineTemplateType = baselinePrints
+            String[] matchedId = best.getId().split("#");
+            String baselineId = matchedId[0];
+            Biometric baseline = baselinePrints
                     .stream()
                     .filter(f -> StringUtils.equals(f.getId(), baselineId))
-                    .map(Biometric::getTemplateType)
                     .findFirst().orElse(null);
+            if (baseline == null) {
+                LOG.warn("Recapture matched {}, which is not among the baseline prints loaded", baselineId);
+                deduplication.setUnmatchedCount(deduplication.getUnmatchedCount() + 1);
+                return null;
+            }
+            String baselineTemplateType = baseline.getTemplateType();
             deduplication.setMatchedCount(deduplication.getMatchedCount() + 1);
 
-            assert baselineTemplateType != null;
             String key = "BASELINE_" + baselineTemplateType.toUpperCase().replaceAll(" ", "_");
             String value = "RECAPTURE_" + recapturedTemplateType.toUpperCase().replaceAll(" ", "_");
             details.put(key, value);
@@ -399,9 +400,8 @@ public class BiometricController {
 
             Map<String, Object> matchData = new HashMap<>();
             matchData.put("matchBiometricId", baselineId);
-            matchData.put("matchPersonUuid", best.getProperty("personUuid").toString());
-            matchData.put("matchType", best.getProperty("templateType").toString()
-                    .equalsIgnoreCase(recapturedTemplateType) ? "Perfect Match" : "Imperfect Match");
+            matchData.put("matchPersonUuid", matchedId.length > 1 ? matchedId[1] : baseline.getPersonUuid());
+            matchData.put("matchType", samePosition ? "Perfect Match" : "Imperfect Match");
             return matchData;
         } finally {
             biometricClient.dispose();
@@ -473,13 +473,10 @@ public class BiometricController {
         LOG.info("Recall matched gallery entry {} with score {} ({} candidate(s) over threshold)",
                 best.getId(), best.getScore(), results.size());
 
-        Object biometricId = best.getProperty("biometricId");
-        if (biometricId != null && !biometricId.toString().trim().isEmpty()) {
-            return biometricId.toString();
-        }
-        // Gallery ids are biometricId#personUuid; the id itself may contain a #.
+        // Gallery ids are biometricId#personUuid. getProperty throws when absent, and a matching
+        // result does not carry the properties set on the enrolled subject.
         String id = best.getId();
-        int separator = id.lastIndexOf('#');
+        int separator = id.indexOf('#');
         return separator <= 0 ? null : id.substring(0, separator);
     }
 

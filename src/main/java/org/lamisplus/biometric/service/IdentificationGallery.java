@@ -263,8 +263,6 @@ public class IdentificationGallery {
             NSubject subject = new NSubject();
             subject.setTemplateBuffer(new NBuffer(normalisedViewNumber(record)));
             subject.setId(fingerPrint.getId() + "#" + fingerPrint.getPersonUuid());
-            subject.setProperty("personUuid", fingerPrint.getPersonUuid());
-            subject.setProperty("biometricId", fingerPrint.getId());
             subjects.add(subject);
         }
 
