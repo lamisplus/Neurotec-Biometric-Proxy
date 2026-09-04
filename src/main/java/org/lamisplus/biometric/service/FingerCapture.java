@@ -13,55 +13,62 @@ import org.springframework.stereotype.Service;
 
 import java.util.EnumSet;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-/** Auto capture waits for a finger to arrive; this grabs one already resting on the platen. */
 @Slf4j
 @Service
 public class FingerCapture {
 
-    private static final long GRAB_BUDGET_MILLIS = 2000L;
-    private static final long GRAB_TIMEOUT_MILLIS = 700L;
-    private static final long POLL_INTERVAL_MILLIS = 150L;
+    private static final long GRAB_TIMEOUT_MILLIS = 1500L;
+    private static final long DRAIN_TIMEOUT_MILLIS = 2000L;
+
+    /** Off by default: manual grab is unverified against real hardware. */
+    @Value("${lamisplus.neurotec.grab-current-frame:false}")
+    private boolean grabCurrentFrame;
 
     @Value("${server.quality}")
     private long quality;
 
     public NBiometricStatus capture(NBiometricClient client, NSubject subject) {
-        long deadline = System.currentTimeMillis() + GRAB_BUDGET_MILLIS;
-        while (System.currentTimeMillis() < deadline) {
-            if (NBiometricStatus.OK.equals(grab(client, subject)) && qualityOf(subject) >= quality) {
-                return NBiometricStatus.OK;
-            }
-            if (!pause()) {
-                break;
-            }
+        if (grabCurrentFrame && grabbedCurrentFrame(client, subject)) {
+            return NBiometricStatus.OK;
         }
         return waitForFinger(client, subject);
     }
 
-    private NBiometricStatus grab(NBiometricClient client, NSubject subject) {
+    /**
+     * Auto capture waits for a finger to arrive, so one already on the platen is never seen.
+     * A single attempt only: cancelling leaves native work that must drain before reuse.
+     */
+    private boolean grabbedCurrentFrame(NBiometricClient client, NSubject subject) {
         resetFinger(subject, EnumSet.of(NBiometricCaptureOption.MANUAL));
         NAsyncOperation<NBiometricStatus> operation;
         try {
             operation = client.captureAsync(subject);
+            client.force();
         } catch (Exception e) {
             LOG.debug("Could not start a manual capture: {}", e.getMessage());
-            return NBiometricStatus.CAPTURE_ERROR;
+            return false;
         }
         try {
-            client.force();
-            return operation.get(GRAB_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            operation.cancel(true);
-            return NBiometricStatus.TIMEOUT;
+            NBiometricStatus status = operation.get(GRAB_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+            return NBiometricStatus.OK.equals(status) && qualityOf(subject) >= quality;
         } catch (InterruptedException e) {
-            operation.cancel(true);
+            drain(operation);
             Thread.currentThread().interrupt();
-            return NBiometricStatus.CANCELED;
+            return false;
         } catch (Exception e) {
             LOG.debug("Manual capture did not complete: {}", e.getMessage());
-            return NBiometricStatus.CAPTURE_ERROR;
+            drain(operation);
+            return false;
+        }
+    }
+
+    private static void drain(NAsyncOperation<NBiometricStatus> operation) {
+        try {
+            operation.cancel(true);
+            operation.get(DRAIN_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+        } catch (Exception ignored) {
+            // The subject is reused next, so the operation must be finished either way.
         }
     }
 
@@ -83,16 +90,6 @@ public class FingerCapture {
             return subject.getFingers().get(0).getObjects().get(0).getQuality();
         } catch (Exception e) {
             return 0L;
-        }
-    }
-
-    private static boolean pause() {
-        try {
-            Thread.sleep(POLL_INTERVAL_MILLIS);
-            return true;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
         }
     }
 }
