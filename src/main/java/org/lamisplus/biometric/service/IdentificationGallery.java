@@ -40,6 +40,10 @@ public class IdentificationGallery {
 
     private static final int WAIT_FOR_GALLERY_SECONDS = 5;
 
+    private static final long CHECK_INTERVAL_MILLIS = 2000L;
+
+    private static final int MAXIMAL_RESULT_COUNT = 10;
+
     private int unreadable = 0;
     private int searchable = 0;
 
@@ -53,6 +57,8 @@ public class IdentificationGallery {
 
     /** The database state the gallery was last built from; compared for equality only. */
     private String galleryFingerprint;
+
+    private long lastCheckedAt;
 
     /** Builds off the request thread so the first recall of the day does not wait for it. */
     @EventListener(ApplicationReadyEvent.class)
@@ -92,6 +98,13 @@ public class IdentificationGallery {
     }
 
     private NBiometricClient upToDateClient() {
+        // The probe aggregates the whole table, so a burst of recalls must not repeat it.
+        long now = System.currentTimeMillis();
+        if (client != null && now - lastCheckedAt < CHECK_INTERVAL_MILLIS) {
+            return client;
+        }
+        lastCheckedAt = now;
+
         String fingerprint = biometricRepository.getIdentificationGalleryFingerprint();
         if (client != null && fingerprint != null && fingerprint.equals(galleryFingerprint)) {
             return client;
@@ -159,9 +172,14 @@ public class IdentificationGallery {
         }
         client = new NBiometricClient();
         client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
+        // LOW is the accurate end of the scale; recall must not trade accuracy for speed.
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
+        client.setMaximalThreadCount(Runtime.getRuntime().availableProcessors());
+        // Recall reads the best result; the rest are collected only to be logged.
+        client.setMatchingMaximalResultCount(MAXIMAL_RESULT_COUNT);
         enrolled.clear();
         galleryFingerprint = null;
+        lastCheckedAt = 0L;
         searchable = 0;
     }
 
