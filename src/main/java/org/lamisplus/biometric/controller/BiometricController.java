@@ -19,6 +19,7 @@ import org.lamisplus.biometric.controller.vm.MatchedPair;
 import org.lamisplus.biometric.domain.dto.*;
 import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
+import org.lamisplus.biometric.service.FingerCapture;
 import org.lamisplus.biometric.service.FingerScannerManager;
 import org.lamisplus.biometric.service.IdentificationGallery;
 import org.lamisplus.biometric.util.StoredTemplate;
@@ -58,6 +59,7 @@ public class BiometricController {
     private final JdbcTemplate jdbcTemplate;
     private final FingerScannerManager fingerScannerManager;
     private final IdentificationGallery identificationGallery;
+    private final FingerCapture fingerCapture;
 
     private Deduplication rDeduplicationDTO;
     private final Map<String, String> details = new HashMap<>();
@@ -129,9 +131,6 @@ public class BiometricController {
         }
 
         try (NSubject subject = new NSubject()) {
-            final NFinger finger = new NFinger();
-            finger.setPosition(NFPosition.UNKNOWN);
-            subject.getFingers().add(finger);
 
             if (this.scannerIsNotSet(reader)) {
                 responseData.put("ERROR", "Biometrics Scanner not found");
@@ -139,7 +138,7 @@ public class BiometricController {
                 return new ResponseEntity<>(responseData, HttpStatus.OK);
             }
 
-            NBiometricStatus status = client.capture(subject);
+            NBiometricStatus status = fingerCapture.capture(client, subject);
 
             if (status.equals(NBiometricStatus.OK)) {
                 status = client.createTemplate(subject);
@@ -209,9 +208,6 @@ public class BiometricController {
         }
 
         try (NSubject subject = new NSubject()) {
-            final NFinger finger = new NFinger();
-            finger.setPosition(NFPosition.UNKNOWN);
-            subject.getFingers().add(finger);
 
             if (this.scannerIsNotSet(reader)) {
                 result.getMessage().put("ERROR", "Biometrics Scanner not found");
@@ -220,7 +216,7 @@ public class BiometricController {
                 return result;
             }
 
-            NBiometricStatus status = client.capture(subject);
+            NBiometricStatus status = fingerCapture.capture(client, subject);
 
             if (status.equals(NBiometricStatus.OK)) {
 
