@@ -102,10 +102,14 @@ public class FingerCapture {
     }
 
     private NBiometricStatus waitForFinger(NBiometricClient client, NSubject subject) {
-        resetFinger(subject, EnumSet.noneOf(NBiometricCaptureOption.class));
+        subject.getFingers().clear();
+        NFinger finger = new NFinger();
+        finger.setPosition(NFPosition.UNKNOWN);
+        subject.getFingers().add(finger);
         return client.capture(subject);
     }
 
+    /** Only for the manual grab: an empty option set is not the same as the SDK default. */
     private static void resetFinger(NSubject subject, EnumSet<NBiometricCaptureOption> options) {
         subject.getFingers().clear();
         NFinger finger = new NFinger();

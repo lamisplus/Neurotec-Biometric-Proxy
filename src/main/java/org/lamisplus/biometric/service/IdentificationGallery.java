@@ -194,7 +194,9 @@ public class IdentificationGallery {
                 neurotecProperties.getIdentificationThreshold(),
                 neurotecProperties.getMinimalMinutiaCount());
         client.setMatchingThreshold(neurotecProperties.getIdentificationThreshold());
-        client.setFingersMinimalMinutiaCount(neurotecProperties.getMinimalMinutiaCount());
+        if (neurotecProperties.getMinimalMinutiaCount() > 0) {
+            client.setFingersMinimalMinutiaCount(neurotecProperties.getMinimalMinutiaCount());
+        }
         // LOW is the accurate end of the scale; recall must not trade accuracy for speed.
         client.setFingersMatchingSpeed(NMatchingSpeed.LOW);
         client.setMaximalThreadCount(Runtime.getRuntime().availableProcessors());

@@ -15,13 +15,10 @@ public class NeurotecProperties {
 
     private String pluginSearchPath = "";
 
-    /**
-     * Searching a large gallery is many comparisons, so a 1:1 threshold false-accepts at 1:N.
-     */
-    private int identificationThreshold = 144;
+    private int identificationThreshold = 96;
 
-    /** Below this a template is too weak to identify anyone, whatever the matcher scores it. */
-    private int minimalMinutiaCount = 8;
+    /** Zero leaves the SDK default. Raise only on evidence: it drops prints from the gallery. */
+    private int minimalMinutiaCount = 0;
 
     private String licenseServer = "/local";
 
