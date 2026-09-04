@@ -85,7 +85,8 @@ public interface BiometricRepository extends JpaRepository<Biometric, String> {
      * <p>Index: {@code (last_modified_date) where archived = 0 and version_iso_20
      * and template is not null}.</p>
      */
-    @Query(value = "select count(*) || '@' || coalesce(max(last_modified_date)::text, '-') " +
+    // cast(), not ::text - Hibernate reads : in a native query as a named parameter.
+    @Query(value = "select count(*) || '@' || coalesce(cast(max(last_modified_date) as text), '-') " +
             "from biometric where archived = 0 " +
             "and version_iso_20 = true and template is not null",
             nativeQuery = true)
