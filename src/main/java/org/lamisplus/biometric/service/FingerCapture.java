@@ -7,6 +7,7 @@ import com.neurotec.biometrics.NFinger;
 import com.neurotec.biometrics.NSubject;
 import com.neurotec.biometrics.client.NBiometricClient;
 import com.neurotec.util.concurrent.NAsyncOperation;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,10 +17,13 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class FingerCapture {
 
     private static final long GRAB_TIMEOUT_MILLIS = 1500L;
     private static final long DRAIN_TIMEOUT_MILLIS = 2000L;
+
+    private final FingerScannerManager fingerScannerManager;
 
     /** Off by default: manual grab is unverified against real hardware. */
     @Value("${lamisplus.neurotec.grab-current-frame:false}")
@@ -28,11 +32,36 @@ public class FingerCapture {
     @Value("${server.quality}")
     private long quality;
 
-    public NBiometricStatus capture(NBiometricClient client, NSubject subject) {
+    /**
+     * A cached scanner handle goes stale when the device re-plugs or the machine sleeps, and the
+     * SDK then throws "Device is not available". Re-bind and try once more, as SecuGen reopens.
+     */
+    public NBiometricStatus capture(NBiometricClient client, NSubject subject, String reader) {
+        try {
+            return attempt(client, subject);
+        } catch (Exception e) {
+            LOG.warn("Capture failed on {}: {}. Re-binding the scanner and retrying once.",
+                    reader, rootCause(e));
+            if (!fingerScannerManager.rebindScanner(client, reader)) {
+                return NBiometricStatus.SOURCE_NOT_FOUND;
+            }
+            return attempt(client, subject);
+        }
+    }
+
+    private NBiometricStatus attempt(NBiometricClient client, NSubject subject) {
         if (grabCurrentFrame && grabbedCurrentFrame(client, subject)) {
             return NBiometricStatus.OK;
         }
         return waitForFinger(client, subject);
+    }
+
+    private static String rootCause(Throwable t) {
+        Throwable cause = t;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
     /**

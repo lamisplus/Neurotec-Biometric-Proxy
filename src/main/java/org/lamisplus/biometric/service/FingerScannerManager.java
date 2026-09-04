@@ -186,6 +186,25 @@ public class FingerScannerManager {
         return true;
     }
 
+    /**
+     * Re-resolves and re-assigns unconditionally. bindScanner skips a device whose id is
+     * unchanged, which is exactly the stale handle that has to be replaced after a failure.
+     */
+    public boolean rebindScanner(NBiometricClient client, String reader) {
+        String key = ReaderMatcher.decode(reader);
+        resolvedScanners.remove(key);
+        Optional<NFScanner> resolved = lookUpScanner(reader);
+        if (!resolved.isPresent()) {
+            LOG.error("Reader '{}' is no longer attached; capture cannot recover", reader);
+            return false;
+        }
+        NFScanner scanner = resolved.get();
+        resolvedScanners.put(key, scanner);
+        client.setFingerScanner(scanner);
+        LOG.info("Re-bound the capture client to scanner {} after a device failure", deviceId(scanner));
+        return true;
+    }
+
     private static boolean isUsable(NFScanner scanner) {
         try {
             return scanner.isAvailable();

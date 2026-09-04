@@ -130,7 +130,7 @@ public class BiometricController {
                 return new ResponseEntity<>(responseData, HttpStatus.OK);
             }
 
-            NBiometricStatus status = fingerCapture.capture(client, subject);
+            NBiometricStatus status = fingerCapture.capture(client, subject, reader);
 
             if (status.equals(NBiometricStatus.OK)) {
                 status = client.createTemplate(subject);
@@ -203,7 +203,7 @@ public class BiometricController {
                 return result;
             }
 
-            NBiometricStatus status = fingerCapture.capture(client, subject);
+            NBiometricStatus status = fingerCapture.capture(client, subject, reader);
 
             if (status.equals(NBiometricStatus.OK)) {
 
