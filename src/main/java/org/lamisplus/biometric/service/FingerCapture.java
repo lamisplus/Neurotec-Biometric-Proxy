@@ -50,6 +50,10 @@ public class FingerCapture {
         }
     }
 
+    public boolean grabNow(NBiometricClient client, NSubject subject) {
+        return grabbedCurrentFrame(client, subject);
+    }
+
     private NBiometricStatus attempt(NBiometricClient client, NSubject subject) {
         if (grabCurrentFrame && grabbedCurrentFrame(client, subject)) {
             return NBiometricStatus.OK;

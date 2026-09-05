@@ -21,6 +21,7 @@ import org.lamisplus.biometric.domain.entity.Biometric;
 import org.lamisplus.biometric.repository.BiometricRepository;
 import org.lamisplus.biometric.service.FingerCapture;
 import org.lamisplus.biometric.service.FingerScannerManager;
+import org.lamisplus.biometric.service.FingerMonitor;
 import org.lamisplus.biometric.service.IdentificationGallery;
 import org.lamisplus.biometric.service.PatientRecall;
 import org.lamisplus.biometric.util.StoredTemplate;
@@ -61,6 +62,7 @@ public class BiometricController {
     private final IdentificationGallery identificationGallery;
     private final FingerCapture fingerCapture;
     private final PatientRecall patientRecall;
+    private final FingerMonitor fingerMonitor;
 
     private Deduplication rDeduplicationDTO;
     private final Map<String, String> details = new HashMap<>();
@@ -102,6 +104,24 @@ public class BiometricController {
         // Binds too, so the device opens here rather than on the first finger presented.
         fingerScannerManager.bindScanner(client, reader);
         return fingerScannerManager.bootStatus(reader);
+    }
+
+    @GetMapping(NEUROTEC_URL_VERSION_ONE + "/monitor/identify")
+    public ResponseEntity<ClientIdentificationDTO> monitorIdentify(
+            @RequestParam String reader,
+            @RequestParam(required = false, defaultValue = "15000") long timeoutMillis) {
+        try {
+            reader = URLDecoder.decode(reader, StandardCharsets.UTF_8.toString());
+        } catch (UnsupportedEncodingException ignored) {
+        }
+        if (this.scannerIsNotSet(reader)) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        ClientIdentificationDTO identified =
+                fingerMonitor.identifyNextFinger(client, reader, timeoutMillis);
+        return identified == null
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.ok(identified);
     }
 
     @GetMapping(NEUROTEC_URL_VERSION_ONE + "/server")
@@ -196,6 +216,7 @@ public class BiometricController {
         } catch (UnsupportedEncodingException ignored) {
         }
 
+        fingerScannerManager.scannerLock().lock();
         try (NSubject subject = new NSubject()) {
 
             if (this.scannerIsNotSet(reader)) {
@@ -316,6 +337,8 @@ public class BiometricController {
             result.setDeduplication(captureRequestDTO.getDeduplication());
             result.setType(CaptureResponse.Type.ERROR);
             return result;
+        } finally {
+            fingerScannerManager.scannerLock().unlock();
         }
         client.clear();
 

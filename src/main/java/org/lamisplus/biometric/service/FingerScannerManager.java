@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 @Service
@@ -41,6 +42,12 @@ public class FingerScannerManager {
 
     /** Resolving enumerates every device natively; an unplugged scanner evicts its own entry. */
     private final Map<String, NFScanner> resolvedScanners = new ConcurrentHashMap<>();
+
+    private final ReentrantLock scannerLock = new ReentrantLock();
+
+    public ReentrantLock scannerLock() {
+        return scannerLock;
+    }
 
     @PostConstruct
     public void init() {
