@@ -305,6 +305,9 @@ public class BiometricController {
                     } else {
                         result.getMessage().put("match", "Imperfect...");
                     }
+                    // Replaces, so a re-scanned finger does not leave its earlier scan behind.
+                    capturedBiometricDtosIn.removeIf(existing -> StringUtils.equalsIgnoreCase(
+                            existing.getTemplateType(), captureRequestDTO.getTemplateType()));
                     capturedBiometricDtosIn.add(capturedBiometricDTO);
 
                     result.setIso(true);
@@ -647,7 +650,11 @@ public class BiometricController {
             NSubject subject,
             CaptureRequestDTO captureRequestDTO
             ) {
-        Set<CapturedBiometricDto> templates = captureRequestDTO.getCapturedBiometricsList();
+        // The finger being captured replaces its own earlier scan, so its position cannot block it.
+        List<CapturedBiometricDto> templates = captureRequestDTO.getCapturedBiometricsList().stream()
+                .filter(t -> !StringUtils.equalsIgnoreCase(
+                        t.getTemplateType(), captureRequestDTO.getTemplateType()))
+                .collect(Collectors.toList());
         if (templates.isEmpty()) {
             return NBiometricStatus.MATCH_NOT_FOUND;
         }
