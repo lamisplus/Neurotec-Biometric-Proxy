@@ -22,11 +22,12 @@ public class FingerCapture {
 
     private static final long GRAB_TIMEOUT_MILLIS = 1500L;
     private static final long DRAIN_TIMEOUT_MILLIS = 2000L;
+    private static final long SETTLE_MILLIS = 250L;
 
     private final FingerScannerManager fingerScannerManager;
 
-    /** Off by default: manual grab is unverified against real hardware. */
-    @Value("${lamisplus.neurotec.grab-current-frame:false}")
+    /** Set false to wait for a finger arrival only, as the SDK does on its own. */
+    @Value("${lamisplus.neurotec.grab-current-frame:true}")
     private boolean grabCurrentFrame;
 
     @Value("${server.quality}")
@@ -70,17 +71,20 @@ public class FingerCapture {
      */
     private boolean grabbedCurrentFrame(NBiometricClient client, NSubject subject) {
         resetFinger(subject, EnumSet.of(NBiometricCaptureOption.MANUAL));
-        NAsyncOperation<NBiometricStatus> operation;
+        NAsyncOperation<NBiometricStatus> operation = null;
         try {
             operation = client.captureAsync(subject);
+            // The device needs a moment to produce a frame before force() can accept one.
+            Thread.sleep(SETTLE_MILLIS);
             client.force();
-        } catch (Exception e) {
-            LOG.debug("Could not start a manual capture: {}", e.getMessage());
-            return false;
-        }
-        try {
             NBiometricStatus status = operation.get(GRAB_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-            return NBiometricStatus.OK.equals(status) && qualityOf(subject) >= quality;
+            long quality = qualityOf(subject);
+            if (NBiometricStatus.OK.equals(status) && quality >= this.quality) {
+                LOG.info("Captured a finger already on the scanner, quality {}", quality);
+                return true;
+            }
+            LOG.debug("No usable finger on the scanner: status {}, quality {}", status, quality);
+            return false;
         } catch (InterruptedException e) {
             drain(operation);
             Thread.currentThread().interrupt();
@@ -92,12 +96,16 @@ public class FingerCapture {
         }
     }
 
+    /** The subject is reused next, so the operation must be finished before it is rewritten. */
     private static void drain(NAsyncOperation<NBiometricStatus> operation) {
+        if (operation == null) {
+            return;
+        }
         try {
             operation.cancel(true);
             operation.get(DRAIN_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         } catch (Exception ignored) {
-            // The subject is reused next, so the operation must be finished either way.
+            // Cancelled, failed or timed out: nothing further can be done before the retry.
         }
     }
 
